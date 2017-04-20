@@ -7,15 +7,12 @@ import java.security.MessageDigest;
 import java.util.Map;
 import java.util.TreeMap;
 
-// TODO Fix up this messy GTKey thing, split the context
-// out into its own class and make the function signature
-// reflect the split.
-
 public class Client {
     private int id;
     private int maxDataNodes;
     private TreeMap<Integer, String> aliveNodes;
     private static int REPLICATION_FACTOR = 3;
+    private Context ctx;
 
     public Client(String managerHost) {
         try {
@@ -33,6 +30,7 @@ public class Client {
         } catch (Exception e) {
             e.printStackTrace();
         }
+        ctx = new Context(id, new TreeMap<>());
     }
 
     public Client(int id, int maxDataNodes, TreeMap<Integer, String> aliveNodes) {
@@ -42,43 +40,40 @@ public class Client {
     }
 
     int put(Object key, Object value) {
-        int pos = getNodePosition(key);
+        BigInteger keyHash = getKeyMD5(key);
+        int pos = keyHash.mod(BigInteger.valueOf(maxDataNodes)).intValue();
         // we want the node whose position is the smallest value
         // greater than the position of this key, or the first node
         Map.Entry<Integer, String> host = aliveNodes.ceilingEntry(pos);
         host = host != null ? host : aliveNodes.firstEntry();
+        int firstHost = host.getKey();
 
-        int successes = 0;
-
-        while(successes < REPLICATION_FACTOR) {
+        do{
             try {
                 Registry registry = LocateRegistry.getRegistry(host.getValue());
                 RemoteDataNode node = (RemoteDataNode)
                         registry.lookup("RemoteDataNode" + host.getKey());
-                // TODO Update the vector clock
-                if(node.put(new GTKey(id, key), value) == 0)
-                    successes++;
-                // successful, now move on to next node to replicate
+                if(node.put(ctx, keyHash, value) == 0)
+                    return 0;
+                else
+                    return -1;
+            } catch (Exception e) {
+                // move on to the next host
                 host = aliveNodes.ceilingEntry(host.getKey() + 1);
                 host = host != null ? host : aliveNodes.firstEntry();
-            } catch (Exception e) {
-                // TODO actually handle the case where the node isn't found
                 e.printStackTrace();
-                return -1;
             }
-        }
-        return 0;
+            // do this until we wrap back around, in the case of failure
+        } while(host.getKey() != firstHost);
+        return -1;
     }
 
     Object get(Object key) {
-        // TODO Same deal as the put, basically read from multiple
-        // nodes, then reconcile
         return null;
     }
 
-    // MD5 hashes the key and returns the position in the ring
-    // that corresponds to it.
-    private int getNodePosition(Object obj) {
+
+    private BigInteger getKeyMD5(Object obj) {
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ObjectOutputStream oos = new ObjectOutputStream(baos);
@@ -88,41 +83,10 @@ public class Client {
             MessageDigest m = MessageDigest.getInstance("MD5");
             m.update(baos.toByteArray());
 
-            return new BigInteger(1, m.digest())
-                    .mod(BigInteger.valueOf(maxDataNodes))
-                    .intValue();
+            return new BigInteger(1, m.digest());
         } catch (Exception e) {
-            return 0;
+            return BigInteger.ZERO;
         }
     }
 
-    private class GTKey {
-        int clientId;
-        Object key;
-        private TreeMap<Integer, Integer> clock;
-
-        public GTKey(int clientId, Object key) {
-            this.clientId = clientId;
-            this.key = key;
-            clock = new TreeMap<>();
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-
-            GTKey gtKey = (GTKey) o;
-
-            if (clientId != gtKey.clientId) return false;
-            return key != null ? key.equals(gtKey.key) : gtKey.key == null;
-        }
-
-        @Override
-        public int hashCode() {
-            int result = clientId;
-            result = 31 * result + (key != null ? key.hashCode() : 0);
-            return result;
-        }
-    }
 }

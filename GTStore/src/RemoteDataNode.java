@@ -1,7 +1,10 @@
+import java.math.BigInteger;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
+import java.util.TreeMap;
 
 public interface RemoteDataNode extends Remote {
-    int put(Object key, Object value) throws RemoteException;
-    Object get(Object key) throws RemoteException;
+    int put(Context ctx, BigInteger key, Object value) throws RemoteException;
+    Object get(Context ctx, BigInteger key) throws RemoteException;
+    void updateMembership(TreeMap<Integer, String> aliveNodes);
 }

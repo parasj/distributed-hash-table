@@ -1,3 +1,4 @@
+import java.math.BigInteger;
 import java.rmi.ConnectException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -5,14 +6,12 @@ import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 public class DataNode implements RemoteDataNode {
     private int id;
-    // TODO More types in the map; Object equality is hard
-    // Basically, you won't be able to retrieve anything
-    // since Object equals will check addresses. Change it
-    // to combine client id and key to recover the thing.
-    private Map<Object, Object> map;
+    private TreeMap<Integer, String> aliveNodes;
+    private Map<BigInteger, Object> map;
 
     private DataNode(int id) {
         this.id = id;
@@ -20,14 +19,23 @@ public class DataNode implements RemoteDataNode {
     }
 
     @Override
-    public int put(Object key, Object value) throws RemoteException {
+    public int put(Context ctx, BigInteger key, Object value) throws RemoteException {
+        // TODO replicate
+        // TODO update vector clocks
         map.put(key, value);
         return 0;
     }
 
     @Override
-    public Object get(Object key) throws RemoteException {
-        return map.get((key));
+    public Object get(Context ctx, BigInteger key) throws RemoteException {
+        // TODO contact replica nodes
+        // TODO reconcile differences
+        return map.get(key);
+    }
+
+    @Override
+    public void updateMembership(TreeMap<Integer, String> aliveNodes) {
+        this.aliveNodes = aliveNodes;
     }
 
     public static void main(String[] args) {

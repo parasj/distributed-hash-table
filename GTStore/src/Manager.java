@@ -1,4 +1,6 @@
 import java.rmi.ConnectException;
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.ServerNotActiveException;
@@ -19,17 +21,33 @@ public class Manager implements RemoteManager {
     // Every data node is assigned an id on initialization.
     // Nodes are arranged on a ring of size maxDataNodes and
     // given a random position on that ring.
-    public int registerDataNode() {
+    public int registerDataNode() throws RemoteException {
         int id = 0;
         Random ran = new Random();
         while(!aliveNodes.containsKey(id))
             id = ran.nextInt(maxDataNodes);
         System.out.println("Successfully registered new DataNode with id " + id);
+
         try {
             aliveNodes.put(id, UnicastRemoteObject.getClientHost());
         } catch (ServerNotActiveException e) {
             e.printStackTrace();
         }
+
+        // since this succeeded, we update all data nodes with the new membership
+        // information
+        for (Integer dNodeId : aliveNodes.keySet()) {
+            Registry registry = LocateRegistry
+                    .getRegistry(aliveNodes.get(dNodeId));
+            try {
+                RemoteDataNode node = (RemoteDataNode)
+                        registry.lookup("RemoteDataNode" + dNodeId);
+                node.updateMembership(aliveNodes);
+            } catch (NotBoundException e) {
+                e.printStackTrace();
+            }
+        }
+
         return id;
     }
 
