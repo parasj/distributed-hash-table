@@ -1,30 +1,49 @@
 import java.rmi.ConnectException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
+import java.rmi.server.ServerNotActiveException;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Random;
+import java.util.TreeMap;
 
 public class Manager implements RemoteManager {
     // The number of data nodes ever initialized
-    private int nodes;
-    private Set<Integer> aliveNodes;
+    private int maxDataNodes = 1024;
+    private int clients = 0;
+    private TreeMap<Integer, String> aliveNodes;
 
     private Manager() {
-        nodes = 0;
-        aliveNodes = new HashSet<>();
+        aliveNodes = new TreeMap<>();
     }
 
-    // Every data node is assigned an id on initialization
+    // Every data node is assigned an id on initialization.
+    // Nodes are arranged on a ring of size maxDataNodes and
+    // given a random position on that ring.
     public int registerDataNode() {
-        System.out.println("Successfully registered new DataNode with id " + nodes);
-        aliveNodes.add(nodes);
-        return nodes++;
+        int id = 0;
+        Random ran = new Random();
+        while(!aliveNodes.containsKey(id))
+            id = ran.nextInt(maxDataNodes);
+        System.out.println("Successfully registered new DataNode with id " + id);
+        try {
+            aliveNodes.put(id, UnicastRemoteObject.getClientHost());
+        } catch (ServerNotActiveException e) {
+            e.printStackTrace();
+        }
+        return id;
     }
 
-    public void deRegisterDataNode(int node) {
-        aliveNodes.remove(node);
-        System.out.println("Successfully deregistered DataNode with id " + node);
+    public Client registerClient() {
+        return new Client(clients++, maxDataNodes, aliveNodes);
+    }
+
+    public void deRegisterDataNode(int id) {
+        aliveNodes.remove(id);
+        System.out.println("Successfully deregistered DataNode with id " + id);
+    }
+
+    public TreeMap<Integer, String> getDataNodes() {
+        return aliveNodes;
     }
 
     // TODO redirect clients to the appropriate data node

@@ -3,28 +3,31 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.HashMap;
 import java.util.Map;
 
 public class DataNode implements RemoteDataNode {
-    // TODO on initialization, contact the Manager and let it know you're alive
     private int id;
-    private Map<String, Object> map;
+    // TODO More types in the map; Object equality is hard
+    // Basically, you won't be able to retrieve anything
+    // since Object equals will check addresses. Change it
+    // to combine client id and key to recover the thing.
+    private Map<Object, Object> map;
 
     private DataNode(int id) {
         this.id = id;
+        map = new HashMap<>();
     }
 
     @Override
-    public int put(String key, Object value) throws RemoteException {
+    public int put(Object key, Object value) throws RemoteException {
         map.put(key, value);
-        // TODO all the replication stuff to actually determine the return
-        // value
-        return 1;
+        return 0;
     }
 
     @Override
-    public Object get(String key) throws RemoteException {
-        return map.get(key);
+    public Object get(Object key) throws RemoteException {
+        return map.get((key));
     }
 
     public static void main(String[] args) {

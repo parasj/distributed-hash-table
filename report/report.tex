@@ -1,0 +1,98 @@
+\documentclass[paper=a4,fontsize=11pt]{report} % A4 paper and 11pt font size
+
+\usepackage[T1]{fontenc} % Use 8-bit encoding that has 256 glyphs
+\usepackage{fourier} % Use the Adobe Utopia font for the document - comment this line to return to the LaTeX default
+\usepackage{graphicx} % For pictures
+\usepackage{booktabs} % For tables
+\usepackage{tabularx} % For tables
+\usepackage[english]{babel} % English language/hyphenation
+\usepackage{amsmath,amsfonts,amsthm} % Math packages
+
+\usepackage[margin=1.5in]{geometry}
+
+\usepackage{lipsum} % Used for inserting dummy 'Lorem ipsum' text into the template
+
+\usepackage{sectsty} % Allows customizing section commands
+\allsectionsfont{\centering \normalfont\scshape} % Make all sections centered, the default font and small caps
+
+\usepackage{fancyhdr} % Custom headers and footers
+\pagestyle{fancyplain} % Makes all pages in the document conform to the custom headers and footers
+\fancyhead{} % No page header - if you want one, create it in the same way as the footers below
+\fancyfoot[L]{} % Empty left footer
+\fancyfoot[C]{} % Empty center footer
+\fancyfoot[R]{\thepage} % Page numbering for right footer
+\renewcommand{\headrulewidth}{0pt} % Remove header underlines
+\renewcommand{\footrulewidth}{0pt} % Remove footer underlines
+\setlength{\headheight}{13.6pt} % Customize the height of the header
+
+\numberwithin{equation}{section} % Number equations within sections (i.e. 1.1, 1.2, 2.1, 2.2 instead of 1, 2, 3, 4)
+\numberwithin{figure}{section} % Number figures within sections (i.e. 1.1, 1.2, 2.1, 2.2 instead of 1, 2, 3, 4)
+\numberwithin{table}{section} % Number tables within sections (i.e. 1.1, 1.2, 2.1, 2.2 instead of 1, 2, 3, 4)
+
+% \setlength\parindent{0pt} % Removes all indentation from paragraphs - comment this line for an assignment with lots of text
+
+\renewcommand{\thesection}{\arabic{section}}
+
+%----------------------------------------------------------------------------------------
+%	TITLE SECTION
+%----------------------------------------------------------------------------------------
+
+\newcommand{\horrule}[1]{\rule{\linewidth}{#1}} % Create horizontal rule command with 1 argument of height
+
+\title{	
+\normalfont \normalsize 
+\textsc{Georgia Institute of Technology} \\ [25pt] % Your university, school and/or department name(s)
+\horrule{0.5pt} \\[0.4cm] % Thin top horizontal rule
+\huge CS 6210 Project 4 Report: GTStore \\ % The assignment title
+\horrule{2pt} \\[0.5cm] % Thick bottom horizontal rule
+}
+
+\author{Manas George, Paras Jain} % Your name
+
+\date{\normalsize\today} % Today's date or a custom date
+
+\begin{document}
+
+\maketitle % Print the title
+
+\section{Architectural Notes}
+
+\subsection{Partitioning}
+\begin{enumerate}
+\item Treating the output of a hash function as a ring (largest value wraps around to smallest), each node gets a random value in this space representing position on the ring.
+\item Each data item is assigned to a node by hashing the key to get its position on the ring, and assigning it to the first node with a position larger than the item's position.
+\item The client figures out the node to contact using the hash of the key, and continues going down the ring if the node is not available, only giving up when no data node is available.
+\item In this way, arrival or departure of nodes only affects immediate neighbours.
+\item We assume homogenous nodes and accept the cost of non-uniform data and load distribution that results from the randomized position assignment.
+\end{enumerate}
+
+\subsection{Replication}
+\begin{enumerate}
+\item Replicate in triplicate, or the the number of data nodes alive, whichever is smaller (triplicate works well empirically, CITE THIS).
+\item Each data item is replicated on the node it is assigned to, as well as the two nodes following it on the ring.
+\item Replication is handled by data nodes, not the client; the data nodes contact the two successive data nodes in order to replicate data items. This is done in order to minimize traffic between clients and data nodes, restricting that purely to transfer of data. There is also the assumption that the data nodes have more processing power vailable to them than the clients and therefore should do more of the work.
+\item The Manager keeps track of membership, modifying the membership lists of each data node appropriately when leaving/additional nodes are detected.
+\end{enumerate}
+
+\subsection{Versioning}
+\begin{enumerate}
+\item Eventual consistency, just like Dynamo. A single put call returns before the update is applied on all replicas.
+\item There is an upper bound on propagation times given no failures.
+\item Treat modifications to data item as a new, immutable version; multiple versions of a data item may be present in the system at any given point of time.
+\item Use vector clocks; each data item has a list of (node, version) pairs that stores the versioning information across branches.
+\item \textbf{Reconciliation} If there are two versions in the system that cannot be ordered, we return all the objects in the leaves and treat the subsequent put as the final version of the data item. We effectively push the responsibility of reconciliation in such cases to the user. If ordering is possible, we pick the latest version.
+\item Have not implemented clock truncation yet, assume that there aren't multiple catastrophic server failures.
+\end{enumerate}
+
+\subsection{Put/Get operations}
+\begin{enumerate}
+\item We store key value pairs, both of which are blobs of bytes. The key is MD5 hashed, borrowing a trick from the Dynamo paper, in order to get an unique identifier that is used for all internal operations.
+\item The client determines which node to send get/put requests to based on the hash of the key as described in the section on consistent hashing before.
+\item For put requests, the node generates the vector clock for the new version and writes the new version locally, It then sends the new version to the two successor nodes on the ring. The write is considered successful if both nodes respond.
+\item For get requests, the node asks the two ring successor nodes for all existing versions of the data and waits for both to respond before reconciling and returning the result. If reconciliation takes place, the reconciled versions are written back into the replication nodes. If multiple leaves are returned, the context returns this, and no write-back takes place. Subsequent puts with the same key treat the value submitted by the put as the canonical version, and the put automatically overwrites old versions of all replicas with this reconciled version.
+\end{enumerate}
+
+\subsubsection{Hinted Handoff} (NOT IMPLEMENTED YET)
+Borrowing a technique from the Dynamo paper, if a put operation detects that one of the nodes it tries to write to is unavailable, it moves on to the next node in the ring, marking it as a ``false'' write. False writes are stored separately in the data nodes, and when the failed node comes back online, the Manager asks all nodes to write stored false writes back to their intended locations. We assume low membership churn and that node failures are transient, and do not implement measures to deal with permanent node failures.
+
+\end{document}
