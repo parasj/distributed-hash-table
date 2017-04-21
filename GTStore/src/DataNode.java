@@ -12,29 +12,62 @@ public class DataNode implements RemoteDataNode {
     private int id;
     private TreeMap<Integer, String> aliveNodes;
     private Map<BigInteger, Object> map;
+    private static int REPLICATION_FACTOR = 3;
 
-    private DataNode(int id) {
-        this.id = id;
+    private DataNode(RemoteManager manager) {
+        try {
+            this.id = manager.registerDataNode();
+            // aliveNodes should also contain the current
+            // data node right now, since we just registered
+            // it
+            this.aliveNodes = manager.getAliveNodes();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         map = new HashMap<>();
     }
 
     @Override
-    public int put(Context ctx, BigInteger key, Object value) throws RemoteException {
-        // TODO replicate
-        // TODO update vector clocks
+    public Context put(Context ctx, BigInteger key, Object value) throws RemoteException {
         map.put(key, value);
-        return 0;
+        ctx.replicas++;
+
+        if (ctx.clocks.containsKey(key)) {
+            TreeMap<Integer, Integer> clock = ctx.clocks.get(key);
+            if (clock.containsKey(id))
+                clock.put(id, clock.get(id) + 1); // update the version
+            else
+                clock.put(id, 1);
+        }
+
+        Map.Entry<Integer, String> host = aliveNodes.ceilingEntry(id + 1);
+        host = host != null ? host : aliveNodes.firstEntry();
+        if (ctx.replicas < REPLICATION_FACTOR) {
+            try {
+                Registry registry = LocateRegistry.getRegistry(host.getValue());
+                RemoteDataNode node = (RemoteDataNode)
+                        registry.lookup("RemoteDataNode" + host.getKey());
+                ctx = node.put(ctx, key, value);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        ctx.success = ctx.replicas == REPLICATION_FACTOR;
+        return ctx;
     }
 
     @Override
     public Object get(Context ctx, BigInteger key) throws RemoteException {
-        // TODO contact replica nodes
+        // TODO contact replica nodes clock.get(id)
         // TODO reconcile differences
         return map.get(key);
     }
 
     @Override
     public void updateMembership(TreeMap<Integer, String> aliveNodes) {
+        System.out.println("New membership set: " + aliveNodes.toString()
+                + " of size " + aliveNodes.size());
         this.aliveNodes = aliveNodes;
     }
 
@@ -45,7 +78,7 @@ public class DataNode implements RemoteDataNode {
             Registry registry = LocateRegistry.getRegistry(host);
             RemoteManager managerStub = (RemoteManager)
                     registry.lookup("RemoteManager");
-            DataNode node = new DataNode(managerStub.registerDataNode());
+            DataNode node = new DataNode(managerStub);
             System.out.println("Successfully initialized new DataNode with id " + node.id);
 
             // The DataNode has been registered with the Manager

@@ -22,10 +22,11 @@ public class Manager implements RemoteManager {
     // Nodes are arranged on a ring of size maxDataNodes and
     // given a random position on that ring.
     public int registerDataNode() throws RemoteException {
-        int id = 0;
         Random ran = new Random();
-        while(!aliveNodes.containsKey(id))
+        int id;
+        do {
             id = ran.nextInt(maxDataNodes);
+        } while(aliveNodes.containsKey(id));
         System.out.println("Successfully registered new DataNode with id " + id);
 
         try {
@@ -37,22 +38,35 @@ public class Manager implements RemoteManager {
         // since this succeeded, we update all data nodes with the new membership
         // information
         for (Integer dNodeId : aliveNodes.keySet()) {
-            Registry registry = LocateRegistry
-                    .getRegistry(aliveNodes.get(dNodeId));
-            try {
-                RemoteDataNode node = (RemoteDataNode)
-                        registry.lookup("RemoteDataNode" + dNodeId);
-                node.updateMembership(aliveNodes);
-            } catch (NotBoundException e) {
-                e.printStackTrace();
+            if(dNodeId != id) { // the new node already has the updated aliveNodes set
+                System.out.println("Updating data node " + dNodeId
+                        + " at " + aliveNodes.get(dNodeId));
+                Registry registry = LocateRegistry
+                        .getRegistry(aliveNodes.get(dNodeId));
+                try {
+                    RemoteDataNode node = (RemoteDataNode)
+                            registry.lookup("RemoteDataNode" + dNodeId);
+                    node.updateMembership(aliveNodes);
+                } catch (NotBoundException e) {
+                    e.printStackTrace();
+                }
             }
         }
 
         return id;
     }
 
-    public Client registerClient() {
-        return new Client(clients++, maxDataNodes, aliveNodes);
+    public int registerClient() {
+        return clients++;
+    }
+
+
+    public TreeMap<Integer, String> getAliveNodes() {
+        return aliveNodes;
+    }
+
+    public int getMaxDataNodes() {
+        return maxDataNodes;
     }
 
     public void deRegisterDataNode(int id) {

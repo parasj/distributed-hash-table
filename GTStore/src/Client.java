@@ -11,7 +11,6 @@ public class Client {
     private int id;
     private int maxDataNodes;
     private TreeMap<Integer, String> aliveNodes;
-    private static int REPLICATION_FACTOR = 3;
     private Context ctx;
 
     public Client(String managerHost) {
@@ -19,24 +18,19 @@ public class Client {
             Registry registry = LocateRegistry.getRegistry(managerHost);
             RemoteManager managerStub = (RemoteManager)
                     registry.lookup("RemoteManager");
-            Client client = managerStub.registerClient();
-            this.id = client.id;
-            this.aliveNodes = client.aliveNodes;
+            this.id = managerStub.registerClient();
+            this.aliveNodes = managerStub.getAliveNodes();
+            this.maxDataNodes = managerStub.getMaxDataNodes();
 
-            if(aliveNodes.size() < 3)
-                throw new Exception("Need at least "
-                        + REPLICATION_FACTOR
-                        + " DataNodes to ensure replication doesn't fail");
+            if(aliveNodes.size() < 3) {
+                System.err.println("Need at least 3 DataNodes to " +
+                        "ensure replication doesn't fail");
+                System.exit(0);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
         ctx = new Context(id, new TreeMap<>());
-    }
-
-    public Client(int id, int maxDataNodes, TreeMap<Integer, String> aliveNodes) {
-        this.id = id;
-        this.maxDataNodes = maxDataNodes;
-        this.aliveNodes = aliveNodes;
     }
 
     int put(Object key, Object value) {
@@ -48,15 +42,14 @@ public class Client {
         host = host != null ? host : aliveNodes.firstEntry();
         int firstHost = host.getKey();
 
+        ctx.replicas = 0;
         do{
             try {
                 Registry registry = LocateRegistry.getRegistry(host.getValue());
                 RemoteDataNode node = (RemoteDataNode)
                         registry.lookup("RemoteDataNode" + host.getKey());
-                if(node.put(ctx, keyHash, value) == 0)
-                    return 0;
-                else
-                    return -1;
+                ctx = node.put(ctx, keyHash, value);
+                return ctx.success?0:-1;
             } catch (Exception e) {
                 // move on to the next host
                 host = aliveNodes.ceilingEntry(host.getKey() + 1);
@@ -89,4 +82,13 @@ public class Client {
         }
     }
 
+    // Testing
+    public static void main(String args[]) {
+        Client c = new Client("127.0.0.1");
+        if(c.put("key", 40) < 0) {
+            System.out.println("Insertion failed, welp");
+        } else {
+            System.out.println("Insertion succeeded, yay!");
+        }
+    }
 }
