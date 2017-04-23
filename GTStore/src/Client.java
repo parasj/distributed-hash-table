@@ -81,21 +81,15 @@ public class Client {
         host = host != null ? host : aliveNodes.firstEntry();
         int firstHost = host.getKey();
 
+        ConflictSet cs = null;
+
         ctx.coordinator = true;
         do {
             try {
                 Registry registry = LocateRegistry.getRegistry(host.getValue());
                 RemoteDataNode node = (RemoteDataNode)
                         registry.lookup("RemoteDataNode" + host.getKey());
-                ConflictSet cs = node.get(ctx, keyHash);
-
-                cs.reconcile();
-                VersionedValue result = cs.getValues().get((int) (Math.random() * cs.getValues().size())); // random result
-
-                ctx.clocks.get(key).merge(result.getClock());
-                if (cs.getValues().size() > 1)
-                    put(key, result.getValue());
-                return result.getValue();
+                cs = node.get(ctx, keyHash);
             } catch (Exception e) {
                 // move on to the next host
                 host = aliveNodes.ceilingEntry(host.getKey() + 1);
@@ -103,7 +97,15 @@ public class Client {
                 e.printStackTrace();
             }
             // do this until we wrap back around, in the case of failure
-        } while (host.getKey() != firstHost);
+        } while (cs == null && host.getKey() != firstHost);
+
+        if (cs != null && cs.getValues().size() > 0) {
+            VersionedValue result = cs.getValues().get((int) (Math.random() * cs.getValues().size()));
+            cs.reconcile();
+            ctx.clocks.get(keyHash).merge(result.getClock());
+            put(key, result.getValue());
+            return result.getValue();
+        }
         return null;
     }
 

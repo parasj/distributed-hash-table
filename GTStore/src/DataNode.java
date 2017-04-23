@@ -152,22 +152,25 @@ public class DataNode implements RemoteDataNode {
             replicas++;
         }
 
-        Map.Entry<Integer, String> host = aliveNodes.ceilingEntry(id + 1);
-        host = host != null ? host : aliveNodes.firstEntry();
-        for (int i = 1; i < REPLICATION_FACTOR; i++) {
-            try {
-                Registry registry = LocateRegistry.getRegistry(host.getValue());
-                RemoteDataNode node = (RemoteDataNode)
-                        registry.lookup("RemoteDataNode" + host.getKey());
-                ConflictSet remoteCS = node.get(ctx, key);
-                cs.addAll(remoteCS);
+        if (ctx.coordinator) {
+            Map.Entry<Integer, String> host = aliveNodes.ceilingEntry(id + 1);
+            host = host != null ? host : aliveNodes.firstEntry();
+            for (int i = 1; i < REPLICATION_FACTOR; i++) {
+                try {
+                    Registry registry = LocateRegistry.getRegistry(host.getValue());
+                    RemoteDataNode node = (RemoteDataNode)
+                            registry.lookup("RemoteDataNode" + host.getKey());
+                    ctx.coordinator = false;
+                    ConflictSet remoteCS = node.get(ctx, key);
+                    cs.addAll(remoteCS);
 
-                host = aliveNodes.ceilingEntry(host.getKey() + 1);
-                host = host != null ? host : aliveNodes.firstEntry();
-                replicas++;
-            } catch (Exception e) {
-                System.err.printf("Couldn't access node %d on host %s\n", host.getKey(), host.getValue());
-                e.printStackTrace();
+                    host = aliveNodes.ceilingEntry(host.getKey() + 1);
+                    host = host != null ? host : aliveNodes.firstEntry();
+                    replicas++;
+                } catch (Exception e) {
+                    System.err.printf("Couldn't access node %d on host %s\n", host.getKey(), host.getValue());
+                    e.printStackTrace();
+                }
             }
         }
 
