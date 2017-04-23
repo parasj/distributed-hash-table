@@ -73,9 +73,4 @@ public class VectorClock implements Serializable {
         lastUpdate = System.nanoTime();
         clock.clear();
     }
-
-    private enum VectorDelta {
-        LESS_THAN, EQUAL, GREATER_THAN, CONFLICT;
-    }
-
 }

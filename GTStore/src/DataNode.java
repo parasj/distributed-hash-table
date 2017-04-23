@@ -143,10 +143,10 @@ public class DataNode implements RemoteDataNode {
     }
 
     @Override
-    public Object get(Context ctx, BigInteger key) throws RemoteException {
+    public VersionedValue get(Context ctx, BigInteger key) throws RemoteException {
         // TODO contact replica nodes clock.get(id)
         // TODO reconcile differences
-        return map.get(key);
+        return null;
     }
 
     @Override
