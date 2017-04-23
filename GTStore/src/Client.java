@@ -1,9 +1,14 @@
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.math.BigInteger;
+import java.rmi.AccessException;
+import java.rmi.NotBoundException;
+import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -16,8 +21,7 @@ public class Client {
     public Client(String managerHost) {
         try {
             Registry registry = LocateRegistry.getRegistry(managerHost);
-            RemoteManager managerStub = (RemoteManager)
-                    registry.lookup("RemoteManager");
+            RemoteManager managerStub = (RemoteManager) registry.lookup("RemoteManager");
             this.id = managerStub.registerClient();
             this.aliveNodes = managerStub.getAliveNodes();
             this.maxDataNodes = managerStub.getMaxDataNodes();
@@ -27,7 +31,7 @@ public class Client {
                         "ensure replication doesn't fail");
                 System.exit(0);
             }
-        } catch (Exception e) {
+        } catch (RemoteException | NotBoundException e) {
             e.printStackTrace();
         }
         ctx = new Context();
@@ -56,11 +60,10 @@ public class Client {
         do {
             try {
                 Registry registry = LocateRegistry.getRegistry(host.getValue());
-                RemoteDataNode node = (RemoteDataNode)
-                        registry.lookup("RemoteDataNode" + host.getKey());
+                RemoteDataNode node = (RemoteDataNode) registry.lookup("RemoteDataNode" + host.getKey());
                 ctx = node.put(ctx, keyHash, value);
                 return ctx.success ? 0 : -1;
-            } catch (Exception e) {
+            } catch (RemoteException | NotBoundException e) {
                 // move on to the next host
                 host = aliveNodes.ceilingEntry(host.getKey() + 1);
                 host = host != null ? host : aliveNodes.firstEntry();
@@ -87,19 +90,16 @@ public class Client {
         do {
             try {
                 Registry registry = LocateRegistry.getRegistry(host.getValue());
-                RemoteDataNode node = (RemoteDataNode)
-                        registry.lookup("RemoteDataNode" + host.getKey());
+                RemoteDataNode node = (RemoteDataNode) registry.lookup("RemoteDataNode" + host.getKey());
                 cs = node.get(ctx, keyHash);
-            } catch (Exception e) {
-                // move on to the next host
+            } catch (RemoteException | NotBoundException e) {
                 host = aliveNodes.ceilingEntry(host.getKey() + 1);
                 host = host != null ? host : aliveNodes.firstEntry();
                 e.printStackTrace();
             }
-            // do this until we wrap back around, in the case of failure
         } while (cs == null && host.getKey() != firstHost);
 
-        if (cs != null && cs.getValues().size() > 0) {
+        if (cs != null && cs.isQuorumReached() && cs.getValues().size() > 0) {
             VersionedValue result = cs.getValues().get((int) (Math.random() * cs.getValues().size()));
             cs.reconcile();
             ctx.clocks.get(keyHash).merge(result.getClock());
@@ -107,6 +107,7 @@ public class Client {
                 put(key, result.getValue());
             return result.getValue();
         }
+
         return null;
     }
 
@@ -122,7 +123,8 @@ public class Client {
             m.update(baos.toByteArray());
 
             return new BigInteger(1, m.digest());
-        } catch (Exception e) {
+        } catch (NoSuchAlgorithmException | IOException e) {
+            e.printStackTrace();
             return BigInteger.ZERO;
         }
     }

@@ -1,6 +1,5 @@
 import java.math.BigInteger;
-import java.rmi.ConnectException;
-import java.rmi.RemoteException;
+import java.rmi.*;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
@@ -25,7 +24,7 @@ public class DataNode implements RemoteDataNode {
             // data node right now, since we just registered
             // it
             this.aliveNodes = manager.getAliveNodes();
-        } catch (Exception e) {
+        } catch (RemoteException e) {
             e.printStackTrace();
         }
         map = new HashMap<>();
@@ -45,8 +44,7 @@ public class DataNode implements RemoteDataNode {
             // The DataNode has been registered with the Manager
             // We now register it with the local registry so that
             // it can accept connections from clients
-            RemoteDataNode stub = (RemoteDataNode)
-                    UnicastRemoteObject.exportObject(node, 0);
+            RemoteDataNode stub = (RemoteDataNode) UnicastRemoteObject.exportObject(node, 0);
             // Separate registry for data nodes, on the localhost of the
             // data node. Must add the id of the data node to avoid
             // polluting the registry.
@@ -63,7 +61,7 @@ public class DataNode implements RemoteDataNode {
                     System.out.println("Successfully deregistered from the Manager");
                     localRegistry.unbind("RemoteDataNode" + node.id);
                     System.out.println("Successfully unbound from the local Registry");
-                } catch (Exception e) {
+                } catch (RemoteException | NotBoundException e) {
                     System.err.println("DataNode shutdown exception: " + e.toString());
                     e.printStackTrace();
                 }
@@ -73,7 +71,7 @@ public class DataNode implements RemoteDataNode {
             System.err.println("Manager exception: Please first start the RMI Registry " +
                     "(run rmiregistry in the folder this class resides in)");
             e.printStackTrace();
-        } catch (Exception e) {
+        } catch (RemoteException | AlreadyBoundException | NotBoundException e) {
             System.err.println("DataNode exception: " + e.toString());
             e.printStackTrace();
         }
@@ -123,13 +121,12 @@ public class DataNode implements RemoteDataNode {
             for (int i = 1; i < REPLICATION_FACTOR; i++) {
                 try {
                     Registry registry = LocateRegistry.getRegistry(host.getValue());
-                    RemoteDataNode node = (RemoteDataNode)
-                            registry.lookup("RemoteDataNode" + host.getKey());
+                    RemoteDataNode node = (RemoteDataNode) registry.lookup("RemoteDataNode" + host.getKey());
                     ctx = node.put(ctx, key, value);
                     host = aliveNodes.ceilingEntry(host.getKey() + 1);
                     host = host != null ? host : aliveNodes.firstEntry();
                     replicas++;
-                } catch (Exception e) {
+                } catch (NotBoundException e) {
                     System.err.printf("Couldn't access node %d on host %s\n", host.getKey(), host.getValue());
                     e.printStackTrace();
                 }
@@ -159,8 +156,7 @@ public class DataNode implements RemoteDataNode {
             for (int i = 1; i < REPLICATION_FACTOR; i++) {
                 try {
                     Registry registry = LocateRegistry.getRegistry(host.getValue());
-                    RemoteDataNode node = (RemoteDataNode)
-                            registry.lookup("RemoteDataNode" + host.getKey());
+                    RemoteDataNode node = (RemoteDataNode) registry.lookup("RemoteDataNode" + host.getKey());
                     ctx.coordinator = false;
                     ConflictSet remoteCS = node.get(ctx, key);
                     cs.addAll(remoteCS);
@@ -168,7 +164,7 @@ public class DataNode implements RemoteDataNode {
                     host = aliveNodes.ceilingEntry(host.getKey() + 1);
                     host = host != null ? host : aliveNodes.firstEntry();
                     replicas++;
-                } catch (Exception e) {
+                } catch (NotBoundException e) {
                     System.err.printf("Couldn't access node %d on host %s\n", host.getKey(), host.getValue());
                     e.printStackTrace();
                 }

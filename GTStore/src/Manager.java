@@ -1,5 +1,4 @@
-import java.rmi.ConnectException;
-import java.rmi.RemoteException;
+import java.rmi.*;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.ServerNotActiveException;
@@ -51,7 +50,7 @@ public class Manager implements RemoteManager {
             System.err.println("Manager exception: Please first start the RMI Registry " +
                     "(run rmiregistry in the folder this class resides in)");
             e.printStackTrace();
-        } catch (Exception e) {
+        } catch (RemoteException | AlreadyBoundException e) {
             System.err.println("Manager exception: " + e.toString());
             e.printStackTrace();
         }
@@ -112,12 +111,10 @@ public class Manager implements RemoteManager {
                 System.out.println("Updating data node " + dNodeId
                         + " at " + aliveNodes.get(dNodeId));
                 try {
-                    Registry registry = LocateRegistry
-                            .getRegistry(aliveNodes.get(dNodeId));
-                    RemoteDataNode node = (RemoteDataNode)
-                            registry.lookup("RemoteDataNode" + dNodeId);
+                    Registry registry = LocateRegistry.getRegistry(aliveNodes.get(dNodeId));
+                    RemoteDataNode node = (RemoteDataNode) registry.lookup("RemoteDataNode" + dNodeId);
                     node.updateMembership(aliveNodes);
-                } catch (Exception e) {
+                } catch (RemoteException | NotBoundException e) {
                     e.printStackTrace();
                 }
             }
