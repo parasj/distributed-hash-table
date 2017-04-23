@@ -72,6 +72,38 @@ public class Client {
     }
 
     Object get(Object key) {
+        BigInteger keyHash = getKeyMD5(id, key);
+        int pos = keyHash.mod(BigInteger.valueOf(maxDataNodes)).intValue();
+
+        // we want the node whose position is the smallest value
+        // greater than the position of this key, or the first node
+        Map.Entry<Integer, String> host = aliveNodes.ceilingEntry(pos);
+        host = host != null ? host : aliveNodes.firstEntry();
+        int firstHost = host.getKey();
+
+        ctx.coordinator = true;
+        do {
+            try {
+                Registry registry = LocateRegistry.getRegistry(host.getValue());
+                RemoteDataNode node = (RemoteDataNode)
+                        registry.lookup("RemoteDataNode" + host.getKey());
+                ConflictSet cs = node.get(ctx, keyHash);
+
+                cs.reconcile();
+                VersionedValue result = cs.getValues().get((int) (Math.random() * cs.getValues().size())); // random result
+
+                ctx.clocks.get(key).merge(result.getClock());
+                if (cs.getValues().size() > 1)
+                    put(key, result.getValue());
+                return result.getValue();
+            } catch (Exception e) {
+                // move on to the next host
+                host = aliveNodes.ceilingEntry(host.getKey() + 1);
+                host = host != null ? host : aliveNodes.firstEntry();
+                e.printStackTrace();
+            }
+            // do this until we wrap back around, in the case of failure
+        } while (host.getKey() != firstHost);
         return null;
     }
 

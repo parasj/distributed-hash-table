@@ -136,7 +136,7 @@ public class DataNode implements RemoteDataNode {
 
             ctx.coordinator = true;
             System.out.println("Successfully stored " + replicas + " replicas/" + WRITE_FACTOR);
-            ctx.success = replicas == WRITE_FACTOR;
+            ctx.success = replicas >= WRITE_FACTOR;
         }
 
         return ctx;
@@ -171,6 +171,7 @@ public class DataNode implements RemoteDataNode {
             }
         }
 
+        cs.setQuorumReached(replicas >= READ_FACTOR);
         cs.reconcile();
         return cs;
     }

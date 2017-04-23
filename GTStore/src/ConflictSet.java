@@ -8,11 +8,13 @@ import java.util.stream.Collectors;
  */
 public class ConflictSet implements Serializable {
     private List<VersionedValue> values;
+    private boolean quorumReached; // was this conflict set the result of a quorum?
 
     public ConflictSet(List<VersionedValue> values) {
         this.values = new ArrayList<>();
         this.values.addAll(values);
         this.reconcile();
+        this.quorumReached = false;
     }
 
     public ConflictSet() {
@@ -45,5 +47,13 @@ public class ConflictSet implements Serializable {
     public void add(VersionedValue v) {
         this.values.add(v);
         this.reconcile();
+    }
+
+    public boolean isQuorumReached() {
+        return quorumReached;
+    }
+
+    public void setQuorumReached(boolean quorumReached) {
+        this.quorumReached = quorumReached;
     }
 }

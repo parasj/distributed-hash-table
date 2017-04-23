@@ -4,6 +4,8 @@ import java.util.HashSet;
 import java.util.TreeMap;
 
 class Context implements Serializable {
+    private static final long serialVersionUID = 1L;
+
     // Maps MD5 hash of keys to clocks
     // Each clock is a map of server ids to version numbers
     TreeMap<BigInteger, VectorClock> clocks;
@@ -23,4 +25,13 @@ class Context implements Serializable {
     // set to true; the coordinator node sets it to false before
     // contacting replica nodes.
     boolean coordinator;
+
+    public Context(TreeMap<BigInteger, VectorClock> clocks, HashSet<BigInteger> notReconciled) {
+        this.clocks = clocks;
+        this.notReconciled = notReconciled;
+    }
+
+    public Context() {
+        this(new TreeMap<>(), new HashSet<>());
+    }
 }
