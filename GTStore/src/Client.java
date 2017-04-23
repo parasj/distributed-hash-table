@@ -103,7 +103,8 @@ public class Client {
             VersionedValue result = cs.getValues().get((int) (Math.random() * cs.getValues().size()));
             cs.reconcile();
             ctx.clocks.get(keyHash).merge(result.getClock());
-            put(key, result.getValue());
+            if (cs.getValues().size() > 1)
+                put(key, result.getValue());
             return result.getValue();
         }
         return null;
