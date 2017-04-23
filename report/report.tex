@@ -60,8 +60,8 @@
 \subsection{Partitioning}
 \begin{enumerate}
 \item Treating the output of a hash function as a ring (largest value wraps around to smallest), each node gets a random value in this space representing position on the ring.
-\item Each data item is assigned to a node by hashing the key to get its position on the ring, and assigning it to the first node with a position larger than the item's position.
-\item The client figures out the node to contact using the hash of the key, and continues going down the ring if the node is not available, only giving up when no data node is available.
+\item Each data item is assigned to a node by hashing the client id concatenated with the key to get its position on the ring, and assigning it to the first node with a position larger than the item's position.
+\item The client figures out the node to contact using the hash , and continues going down the ring if the node is not available, only giving up when no data node is available.
 \item In this way, arrival or departure of nodes only affects immediate neighbours.
 \item We assume homogenous nodes and accept the cost of non-uniform data and load distribution that results from the randomized position assignment.
 \end{enumerate}
@@ -86,8 +86,8 @@
 
 \subsection{Put/Get operations}
 \begin{enumerate}
-\item We store key value pairs, both of which are blobs of bytes. The key is MD5 hashed, borrowing a trick from the Dynamo paper, in order to get an unique identifier that is used for all internal operations.
-\item The client determines which node to send get/put requests to based on the hash of the key as described in the section on consistent hashing before.
+\item We store key value pairs, both of which are blobs of bytes. The key is MD5 hashed after prepending the client id to it, borrowing a trick from the Dynamo paper, in order to get an unique identifier that is used for all internal operations.
+\item The client determines which node to send get/put requests to based on the hash as described in the section on consistent hashing before.
 \item For put requests, the node generates the vector clock for the new version and writes the new version locally, It then sends the new version to the two successor nodes on the ring. The write is considered successful if both nodes respond.
 \item For get requests, the node asks the two ring successor nodes for all existing versions of the data and waits for both to respond before reconciling and returning the result. If reconciliation takes place, the reconciled versions are written back into the replication nodes. If multiple leaves are returned, the context returns this, and no write-back takes place. Subsequent puts with the same key treat the value submitted by the put as the canonical version, and the put automatically overwrites old versions of all replicas with this reconciled version.
 \end{enumerate}

@@ -30,11 +30,11 @@ public class Client {
         } catch (Exception e) {
             e.printStackTrace();
         }
-        ctx = new Context(id, new TreeMap<>());
+        ctx = new Context();
     }
 
     int put(Object key, Object value) {
-        BigInteger keyHash = getKeyMD5(key);
+        BigInteger keyHash = getKeyMD5(id, key);
         int pos = keyHash.mod(BigInteger.valueOf(maxDataNodes)).intValue();
         // we want the node whose position is the smallest value
         // greater than the position of this key, or the first node
@@ -42,7 +42,7 @@ public class Client {
         host = host != null ? host : aliveNodes.firstEntry();
         int firstHost = host.getKey();
 
-        ctx.replicas = 0;
+        ctx.coordinator = true;
         do{
             try {
                 Registry registry = LocateRegistry.getRegistry(host.getValue());
@@ -66,10 +66,11 @@ public class Client {
     }
 
 
-    private BigInteger getKeyMD5(Object obj) {
+    private BigInteger getKeyMD5(int id, Object obj) {
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ObjectOutputStream oos = new ObjectOutputStream(baos);
+            oos.writeObject(id);
             oos.writeObject(obj);
             oos.close();
 

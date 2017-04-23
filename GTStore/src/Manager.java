@@ -1,5 +1,4 @@
 import java.rmi.ConnectException;
-import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
@@ -35,24 +34,7 @@ public class Manager implements RemoteManager {
             e.printStackTrace();
         }
 
-        // since this succeeded, we update all data nodes with the new membership
-        // information
-        for (Integer dNodeId : aliveNodes.keySet()) {
-            if(dNodeId != id) { // the new node already has the updated aliveNodes set
-                System.out.println("Updating data node " + dNodeId
-                        + " at " + aliveNodes.get(dNodeId));
-                Registry registry = LocateRegistry
-                        .getRegistry(aliveNodes.get(dNodeId));
-                try {
-                    RemoteDataNode node = (RemoteDataNode)
-                            registry.lookup("RemoteDataNode" + dNodeId);
-                    node.updateMembership(aliveNodes);
-                } catch (NotBoundException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
+        updateMembership(id);
         return id;
     }
 
@@ -72,6 +54,7 @@ public class Manager implements RemoteManager {
     public void deRegisterDataNode(int id) {
         aliveNodes.remove(id);
         System.out.println("Successfully deregistered DataNode with id " + id);
+        updateMembership(-1);
     }
 
     public TreeMap<Integer, String> getDataNodes() {
@@ -81,6 +64,27 @@ public class Manager implements RemoteManager {
     // TODO redirect clients to the appropriate data node
     // Do we do this on a per-request basis or a per-session basis?
     // per-request is more resilient, but then consistency issues
+
+    private void updateMembership(int exclude) {
+        // since this succeeded, we update all data nodes with the new membership
+        // information
+        for (Integer dNodeId : aliveNodes.keySet()) {
+            if(dNodeId != exclude) {
+                System.out.println("Updating data node " + dNodeId
+                        + " at " + aliveNodes.get(dNodeId));
+                try {
+                    Registry registry = LocateRegistry
+                            .getRegistry(aliveNodes.get(dNodeId));
+                    RemoteDataNode node = (RemoteDataNode)
+                            registry.lookup("RemoteDataNode" + dNodeId);
+                    node.updateMembership(aliveNodes);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
 
     public static void main(String args[]) {
         try {
