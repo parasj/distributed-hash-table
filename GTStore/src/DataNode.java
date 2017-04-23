@@ -10,13 +10,13 @@ import java.util.TreeMap;
 
 public class DataNode implements RemoteDataNode {
     private final static int REPLICATION_FACTOR = 3;
-    // Minimum number of successful writes
-    private final static int WRITE_FACTOR = 3;
-    // Minimum number of successful reads
-    private static int READ_FACTOR = 3;
-    private int id;
-    private TreeMap<Integer, String> aliveNodes;
-    private Map<BigInteger, Object> map;
+    private final static int WRITE_FACTOR = 2; // Minimum number of successful writes
+    private static int READ_FACTOR = 2; // Minimum number of successful reads
+
+    private int id; // DataNode ID
+    private TreeMap<Integer, String> aliveNodes; // current view of alive nodes
+    private Map<BigInteger, Object> map; // backing data-store for DataNode
+    private VectorClock clock;
 
     private DataNode(RemoteManager manager) {
         try {
