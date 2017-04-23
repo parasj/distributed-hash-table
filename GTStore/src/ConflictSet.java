@@ -12,7 +12,7 @@ public class ConflictSet implements Serializable {
     public ConflictSet(List<VersionedValue> values) {
         this.values = new ArrayList<>();
         this.values.addAll(values);
-        reconcile();
+        this.reconcile();
     }
 
     public ConflictSet() {
