@@ -18,70 +18,6 @@ public class Manager implements RemoteManager {
         aliveNodes = new TreeMap<>();
     }
 
-    // Every data node is assigned an id on initialization.
-    // Nodes are arranged on a ring of size maxDataNodes and
-    // given a random position on that ring.
-    public int registerDataNode() throws RemoteException {
-        Random ran = new Random();
-        int id;
-        do {
-            id = ran.nextInt(maxDataNodes);
-        } while(aliveNodes.containsKey(id));
-        System.out.println("Successfully registered new DataNode with id " + id);
-
-        try {
-            aliveNodes.put(id, UnicastRemoteObject.getClientHost());
-        } catch (ServerNotActiveException e) {
-            e.printStackTrace();
-        }
-
-        // since this succeeded, we update all data nodes with the new membership
-        // information
-        for (Integer dNodeId : aliveNodes.keySet()) {
-            if(dNodeId != id) { // the new node already has the updated aliveNodes set
-                System.out.println("Updating data node " + dNodeId
-                        + " at " + aliveNodes.get(dNodeId));
-                Registry registry = LocateRegistry
-                        .getRegistry(aliveNodes.get(dNodeId));
-                try {
-                    RemoteDataNode node = (RemoteDataNode)
-                            registry.lookup("RemoteDataNode" + dNodeId);
-                    node.updateMembership(aliveNodes);
-                } catch (NotBoundException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        return id;
-    }
-
-    public int registerClient() {
-        return clients++;
-    }
-
-
-    public TreeMap<Integer, String> getAliveNodes() {
-        return aliveNodes;
-    }
-
-    public int getMaxDataNodes() {
-        return maxDataNodes;
-    }
-
-    public void deRegisterDataNode(int id) {
-        aliveNodes.remove(id);
-        System.out.println("Successfully deregistered DataNode with id " + id);
-    }
-
-    public TreeMap<Integer, String> getDataNodes() {
-        return aliveNodes;
-    }
-
-    // TODO redirect clients to the appropriate data node
-    // Do we do this on a per-request basis or a per-session basis?
-    // per-request is more resilient, but then consistency issues
-
     public static void main(String args[]) {
         try {
             Manager manager = new Manager();
@@ -120,5 +56,68 @@ public class Manager implements RemoteManager {
             System.err.println("Manager exception: " + e.toString());
             e.printStackTrace();
         }
+    }
+
+    // Every data node is assigned an id on initialization.
+    // Nodes are arranged on a ring of size maxDataNodes and
+    // given a random position on that ring.
+    public int registerDataNode() throws RemoteException {
+        Random ran = new Random();
+        int id;
+        do {
+            id = ran.nextInt(maxDataNodes);
+        } while (aliveNodes.containsKey(id));
+        System.out.println("Successfully registered new DataNode with id " + id);
+
+        try {
+            aliveNodes.put(id, UnicastRemoteObject.getClientHost());
+        } catch (ServerNotActiveException e) {
+            e.printStackTrace();
+        }
+
+        // since this succeeded, we update all data nodes with the new membership
+        // information
+        for (Integer dNodeId : aliveNodes.keySet()) {
+            if (dNodeId != id) { // the new node already has the updated aliveNodes set
+                System.out.println("Updating data node " + dNodeId
+                        + " at " + aliveNodes.get(dNodeId));
+                Registry registry = LocateRegistry
+                        .getRegistry(aliveNodes.get(dNodeId));
+                try {
+                    RemoteDataNode node = (RemoteDataNode)
+                            registry.lookup("RemoteDataNode" + dNodeId);
+                    node.updateMembership(aliveNodes);
+                } catch (NotBoundException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        return id;
+    }
+
+    public int registerClient() {
+        return clients++;
+    }
+
+    public TreeMap<Integer, String> getAliveNodes() {
+        return aliveNodes;
+    }
+
+    public int getMaxDataNodes() {
+        return maxDataNodes;
+    }
+
+    public void deRegisterDataNode(int id) {
+        aliveNodes.remove(id);
+        System.out.println("Successfully deregistered DataNode with id " + id);
+    }
+
+    // TODO redirect clients to the appropriate data node
+    // Do we do this on a per-request basis or a per-session basis?
+    // per-request is more resilient, but then consistency issues
+
+    public TreeMap<Integer, String> getDataNodes() {
+        return aliveNodes;
     }
 }
