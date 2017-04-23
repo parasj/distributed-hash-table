@@ -1,8 +1,5 @@
 import java.io.Serializable;
-import java.util.HashSet;
-import java.util.Objects;
-import java.util.Set;
-import java.util.TreeMap;
+import java.util.*;
 
 /**
  * GTStore
@@ -72,5 +69,13 @@ public class VectorClock implements Serializable {
     public void clear() {
         lastUpdate = System.nanoTime();
         clock.clear();
+    }
+
+    @Override
+    public VectorClock clone() {
+        VectorClock newClock = new VectorClock();
+        newClock.merge(this);
+        newClock.lastUpdate = this.lastUpdate;
+        return newClock;
     }
 }

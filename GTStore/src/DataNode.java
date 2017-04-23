@@ -143,10 +143,36 @@ public class DataNode implements RemoteDataNode {
     }
 
     @Override
-    public VersionedValue get(Context ctx, BigInteger key) throws RemoteException {
-        // TODO contact replica nodes clock.get(id)
-        // TODO reconcile differences
-        return null;
+    public ConflictSet get(Context ctx, BigInteger key) throws RemoteException {
+        int replicas = 0;
+
+        ConflictSet cs = new ConflictSet();
+        if (map.containsKey(key)) {
+            cs.add(new VersionedValue(clocks.getOrDefault(key, new VectorClock()), map.get(key)));
+            replicas++;
+        }
+
+        Map.Entry<Integer, String> host = aliveNodes.ceilingEntry(id + 1);
+        host = host != null ? host : aliveNodes.firstEntry();
+        for (int i = 1; i < REPLICATION_FACTOR; i++) {
+            try {
+                Registry registry = LocateRegistry.getRegistry(host.getValue());
+                RemoteDataNode node = (RemoteDataNode)
+                        registry.lookup("RemoteDataNode" + host.getKey());
+                ConflictSet remoteCS = node.get(ctx, key);
+                cs.addAll(remoteCS);
+
+                host = aliveNodes.ceilingEntry(host.getKey() + 1);
+                host = host != null ? host : aliveNodes.firstEntry();
+                replicas++;
+            } catch (Exception e) {
+                System.err.printf("Couldn't access node %d on host %s\n", host.getKey(), host.getValue());
+                e.printStackTrace();
+            }
+        }
+
+        cs.reconcile();
+        return cs;
     }
 
     @Override
