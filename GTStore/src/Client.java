@@ -22,7 +22,7 @@ public class Client {
             this.aliveNodes = managerStub.getAliveNodes();
             this.maxDataNodes = managerStub.getMaxDataNodes();
 
-            if(aliveNodes.size() < 3) {
+            if (aliveNodes.size() < 3) {
                 System.err.println("Need at least 3 DataNodes to " +
                         "ensure replication doesn't fail");
                 System.exit(0);
@@ -31,6 +31,16 @@ public class Client {
             e.printStackTrace();
         }
         ctx = new Context();
+    }
+
+    // Testing
+    public static void main(String args[]) {
+        Client c = new Client("127.0.0.1");
+        if (c.put("key", 40) < 0) {
+            System.out.println("Insertion failed, welp");
+        } else {
+            System.out.println("Insertion succeeded, yay!");
+        }
     }
 
     int put(Object key, Object value) {
@@ -43,13 +53,13 @@ public class Client {
         int firstHost = host.getKey();
 
         ctx.coordinator = true;
-        do{
+        do {
             try {
                 Registry registry = LocateRegistry.getRegistry(host.getValue());
                 RemoteDataNode node = (RemoteDataNode)
                         registry.lookup("RemoteDataNode" + host.getKey());
                 ctx = node.put(ctx, keyHash, value);
-                return ctx.success?0:-1;
+                return ctx.success ? 0 : -1;
             } catch (Exception e) {
                 // move on to the next host
                 host = aliveNodes.ceilingEntry(host.getKey() + 1);
@@ -57,14 +67,13 @@ public class Client {
                 e.printStackTrace();
             }
             // do this until we wrap back around, in the case of failure
-        } while(host.getKey() != firstHost);
+        } while (host.getKey() != firstHost);
         return -1;
     }
 
     Object get(Object key) {
         return null;
     }
-
 
     private BigInteger getKeyMD5(int id, Object obj) {
         try {
@@ -80,16 +89,6 @@ public class Client {
             return new BigInteger(1, m.digest());
         } catch (Exception e) {
             return BigInteger.ZERO;
-        }
-    }
-
-    // Testing
-    public static void main(String args[]) {
-        Client c = new Client("127.0.0.1");
-        if(c.put("key", 40) < 0) {
-            System.out.println("Insertion failed, welp");
-        } else {
-            System.out.println("Insertion succeeded, yay!");
         }
     }
 }
