@@ -16,7 +16,7 @@ public class DataNode implements RemoteDataNode {
     private int id; // DataNode ID
     private TreeMap<Integer, String> aliveNodes; // current view of alive nodes
     private Map<BigInteger, Object> map; // backing data-store for DataNode
-    private VectorClock clock;
+    private TreeMap<BigInteger, VectorClock> clocks; // local clocks per key
 
     private DataNode(RemoteManager manager) {
         try {
@@ -29,6 +29,7 @@ public class DataNode implements RemoteDataNode {
             e.printStackTrace();
         }
         map = new HashMap<>();
+        clocks = new TreeMap<>();
     }
 
     public static void main(String[] args) {
@@ -94,25 +95,20 @@ public class DataNode implements RemoteDataNode {
                     // Only need to set the version number properly here,
                     // the replication code below will take care of updating
                     // replica nodes appropriately.
-                    int maxVersion = ctx.clocks.get(key).values()
-                            .stream().max(Integer::compareTo).get();
+                    int maxVersion = ctx.clocks.get(key).getClock().values().stream().max(Integer::compareTo).orElse(-1);
                     ctx.clocks.get(key).clear();
-                    ctx.clocks.get(key).put(id, maxVersion);
-                    // Done reconciling
-                    ctx.notReconciled.remove(key);
+                    ctx.clocks.get(key).getClock().put(id, maxVersion);
+                    ctx.notReconciled.remove(key); // Done reconciling
                 } else {
                     // Already has clocks, only one latest version leaf, so update the clock
-                    TreeMap<Integer, Integer> clock = ctx.clocks.get(key);
-                    if (clock.containsKey(id))
-                        clock.put(id, clock.get(id) + 1); // update the version
-                    else
-                        clock.put(id, 1);
+                    VectorClock clock = ctx.clocks.get(key);
+                    clock.increment(id);
                 }
             } else {
                 // Doesn't  have associated clock, add a new clock
                 // and add a version timestamp to it
-                TreeMap<Integer, Integer> clock = new TreeMap<>();
-                clock.put(id, 1);
+                VectorClock clock = new VectorClock();
+                clock.getClock().put(id, 1);
                 ctx.clocks.put(key, clock);
             }
 
@@ -133,11 +129,11 @@ public class DataNode implements RemoteDataNode {
                     host = host != null ? host : aliveNodes.firstEntry();
                     replicas++;
                 } catch (Exception e) {
-                    System.err.println("Couldn't access node " + host.getKey()
-                            + " on host " + host.getValue());
+                    System.err.printf("Couldn't access node %d on host %s\n", host.getKey(), host.getValue());
                     e.printStackTrace();
                 }
             }
+
             ctx.coordinator = true;
             System.out.println("Successfully stored " + replicas + " replicas/" + WRITE_FACTOR);
             ctx.success = replicas == WRITE_FACTOR;

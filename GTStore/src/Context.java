@@ -6,7 +6,7 @@ import java.util.TreeMap;
 class Context implements Serializable {
     // Maps MD5 hash of keys to clocks
     // Each clock is a map of server ids to version numbers
-    TreeMap<BigInteger, TreeMap<Integer, Integer>> clocks;
+    TreeMap<BigInteger, VectorClock> clocks;
 
     // Add a key to this set in the gets call if multiple leaf
     // data items are retrieved and automatic reconciliation is

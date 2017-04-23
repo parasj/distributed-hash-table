@@ -44,6 +44,7 @@ public class VectorClock implements Serializable {
     }
 
     public void merge(VectorClock other) {
+        lastUpdate = System.nanoTime();
         other.clock.forEach((k, v) -> clock.put(k, Math.max(clock.getOrDefault(k, -1), v)));
     }
 
@@ -66,6 +67,11 @@ public class VectorClock implements Serializable {
         else if (!aBigger && !bBigger) // a == b
             return VectorDelta.EQUAL;
         return VectorDelta.CONFLICT;
+    }
+
+    public void clear() {
+        lastUpdate = System.nanoTime();
+        clock.clear();
     }
 
     private enum VectorDelta {
