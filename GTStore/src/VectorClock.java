@@ -1,5 +1,8 @@
 import java.io.Serializable;
-import java.util.*;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * GTStore
@@ -11,6 +14,34 @@ public class VectorClock implements Serializable {
     public VectorClock() {
         clock = new TreeMap<>();
         lastUpdate = System.nanoTime();
+    }
+
+    public static VectorDelta compare(VectorClock a, VectorClock b) {
+        Set<Integer> intersection = new HashSet<>(a.clock.keySet());
+        intersection.retainAll(b.clock.keySet()); // intersect
+
+        boolean v1HasElementsGreaterThanV2 =
+                a.clock.entrySet().stream()
+                        .filter(e -> e.getValue() > b.clock.getOrDefault(e.getKey(), -1))
+                        .count() > 0;
+
+        boolean v2HasElementsGreaterThanV1 =
+                b.clock.entrySet().stream()
+                        .filter(e -> e.getValue() > a.clock.getOrDefault(e.getKey(), -1))
+                        .count() > 0;
+
+        boolean aBigger = (a.clock.size() > intersection.size()) || v1HasElementsGreaterThanV2; // v1 > v2
+        boolean bBigger = (b.clock.size() > intersection.size()) || v2HasElementsGreaterThanV1; // v2 < v1
+
+        if (aBigger && !bBigger) // a > b
+            return VectorDelta.GREATER_THAN;
+        else if (bBigger && !aBigger) // a < b
+            return VectorDelta.LESS_THAN;
+        else if (aBigger && bBigger) // a > b and b > a
+            return VectorDelta.CONFLICT;
+        else if (!aBigger && !bBigger) // a == b
+            return VectorDelta.EQUAL;
+        return VectorDelta.CONFLICT;
     }
 
     public TreeMap<Integer, Integer> getClock() {
@@ -43,30 +74,6 @@ public class VectorClock implements Serializable {
     public void merge(VectorClock other) {
         lastUpdate = System.nanoTime();
         other.clock.forEach((k, v) -> clock.put(k, Math.max(clock.getOrDefault(k, -1), v)));
-    }
-
-    public static VectorDelta compare(VectorClock a, VectorClock b) {
-        Set<Integer> intersection = new HashSet<>(a.clock.keySet());
-        intersection.retainAll(b.clock.keySet()); // intersect
-
-        boolean v1HasElementsGreaterThanV2 =
-                a.clock.entrySet().stream()
-                        .filter(e -> e.getValue() > b.clock.getOrDefault(e.getKey(), -1))
-                        .count() > 0;
-        boolean v2HasElementsGreaterThanV1 = b.clock.entrySet().stream().filter(e -> e.getValue() > a.clock.getOrDefault(e.getKey(), -1)).count() > 0;
-
-        boolean aBigger = (a.clock.size() > intersection.size()) || v1HasElementsGreaterThanV2; // v1 > v2
-        boolean bBigger = (b.clock.size() > intersection.size()) || v2HasElementsGreaterThanV1; // v2 < v1
-
-        if (aBigger && !bBigger) // a > b
-            return VectorDelta.GREATER_THAN;
-        else if (bBigger && !aBigger) // a < b
-            return VectorDelta.LESS_THAN;
-        else if (aBigger && bBigger) // a > b and b > a
-            return VectorDelta.CONFLICT;
-        else if (!aBigger && !bBigger) // a == b
-            return VectorDelta.EQUAL;
-        return VectorDelta.CONFLICT;
     }
 
     public void clear() {
