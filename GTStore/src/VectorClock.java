@@ -49,8 +49,11 @@ public class VectorClock implements Serializable {
         Set<Integer> intersection = new HashSet<>(a.clock.keySet());
         intersection.retainAll(b.clock.keySet()); // intersect
 
-        boolean v1HasElementsGreaterThanV2 = a.clock.entrySet().stream().filter(e -> e.getValue() > b.clock.get(e.getKey())).count() > 0;
-        boolean v2HasElementsGreaterThanV1 = b.clock.entrySet().stream().filter(e -> e.getValue() > a.clock.get(e.getKey())).count() > 0;
+        boolean v1HasElementsGreaterThanV2 =
+                a.clock.entrySet().stream()
+                        .filter(e -> e.getValue() > b.clock.getOrDefault(e.getKey(), -1))
+                        .count() > 0;
+        boolean v2HasElementsGreaterThanV1 = b.clock.entrySet().stream().filter(e -> e.getValue() > a.clock.getOrDefault(e.getKey(), -1)).count() > 0;
 
         boolean aBigger = (a.clock.size() > intersection.size()) || v1HasElementsGreaterThanV2; // v1 > v2
         boolean bBigger = (b.clock.size() > intersection.size()) || v2HasElementsGreaterThanV1; // v2 < v1
