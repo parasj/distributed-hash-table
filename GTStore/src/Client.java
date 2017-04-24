@@ -8,16 +8,19 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Function;
 
 public class Client {
     private int id;
     private int maxDataNodes;
     private TreeMap<Integer, String> aliveNodes;
     private Context ctx;
+    private Function<List<VersionedValue>, VersionedValue> conflictResolver;
 
-    public Client(String managerHost) {
+    public Client(String managerHost, Function<List<VersionedValue>, VersionedValue> conflictResolver) {
         try {
             Registry registry = LocateRegistry.getRegistry(managerHost);
             RemoteManager managerStub = (RemoteManager) registry.lookup("RemoteManager");
@@ -34,11 +37,12 @@ public class Client {
             e.printStackTrace();
         }
         ctx = new Context();
+        this.conflictResolver = conflictResolver;
     }
 
     // Testing
     public static void main(String args[]) {
-        Client c = new Client("127.0.0.1");
+        Client c = new Client("127.0.0.1", (x) -> x.get(0));
         if (c.put("key", 40) < 0) {
             System.out.println("Insertion failed, welp");
         } else {
@@ -99,7 +103,7 @@ public class Client {
         } while (cs == null && host.getKey() != firstHost);
 
         if (cs != null && cs.isQuorumReached() && cs.getValues().size() > 0) {
-            VersionedValue result = cs.getValues().get((int) (Math.random() * cs.getValues().size()));
+            VersionedValue result = conflictResolver.apply(cs.getValues());
             cs.reconcile();
             ctx.clocks.get(keyHash).merge(result.getClock());
             if (cs.getValues().size() > 1)
