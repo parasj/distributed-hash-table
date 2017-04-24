@@ -40,9 +40,13 @@ public class Client {
         this.conflictResolver = conflictResolver;
     }
 
+    public Client(String managerHost) {
+        this(managerHost, (cs) -> cs.stream().findFirst().orElse(null));
+    }
+
     // Testing
     public static void main(String args[]) {
-        Client c = new Client("127.0.0.1", (x) -> x.get(0));
+        Client c = new Client("127.0.0.1");
         if (c.put("key", 40) < 0) {
             System.out.println("Insertion failed, welp");
         } else {
