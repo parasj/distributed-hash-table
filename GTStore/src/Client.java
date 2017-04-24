@@ -1,4 +1,3 @@
-import clock.ConflictResolutionStrategy;
 import clock.ConflictSet;
 import clock.VersionedValue;
 import server.Context;
@@ -20,14 +19,14 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.Function;
 
-public class Client {
+public class Client<K, V> {
     private int id;
     private int maxDataNodes;
     private TreeMap<Integer, String> aliveNodes;
     private Context ctx;
-    private Function<List<VersionedValue>, VersionedValue> conflictResolver;
+    private Function<List<VersionedValue<V>>, VersionedValue<V>> conflictResolver;
 
-    public Client(String managerHost, Function<List<VersionedValue>, VersionedValue> conflictResolver) {
+    public Client(String managerHost, Function<List<VersionedValue<V>>, VersionedValue<V>> conflictResolver) {
         try {
             Registry registry = LocateRegistry.getRegistry(managerHost);
             RemoteManager managerStub = (RemoteManager) registry.lookup("server.RemoteManager");
@@ -48,7 +47,10 @@ public class Client {
     }
 
     public Client(String managerHost) {
-        this(managerHost, ConflictResolutionStrategy.LAST_UPDATE);
+        this(managerHost,
+                (cs) -> cs.stream()
+                    .max((s1, s2) -> Long.compare(s1.getClock().getLastUpdate(), s2.getClock().getLastUpdate()))
+                    .orElse(null));
     }
 
     /**
@@ -59,9 +61,10 @@ public class Client {
      * @param value Value to store
      * @return Whether the put request was successful
      */
-    public boolean put(Object key, Object value) {
+    public boolean put(K key, V value) {
         BigInteger keyHash = getKeyMD5(id, key);
         int pos = keyHash.mod(BigInteger.valueOf(maxDataNodes)).intValue();
+
         // we want the node whose position is the smallest value
         // greater than the position of this key, or the first node
         Map.Entry<Integer, String> host = aliveNodes.ceilingEntry(pos);
@@ -94,7 +97,7 @@ public class Client {
      * @param key Hashable key to retrieve
      * @return stored value or null
      */
-    public Object get(Object key) {
+    public V get(K key) {
         BigInteger keyHash = getKeyMD5(id, key);
         int pos = keyHash.mod(BigInteger.valueOf(maxDataNodes)).intValue();
 
@@ -104,14 +107,14 @@ public class Client {
         host = host != null ? host : aliveNodes.firstEntry();
         int firstHost = host.getKey();
 
-        ConflictSet cs = null;
+        ConflictSet<V> cs = null;
 
         ctx.coordinator = true;
         do {
             try {
                 Registry registry = LocateRegistry.getRegistry(host.getValue());
                 RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + host.getKey());
-                cs = node.get(ctx, keyHash);
+                cs = (ConflictSet<V>) node.get(ctx, keyHash);
             } catch (RemoteException | NotBoundException e) {
                 host = aliveNodes.ceilingEntry(host.getKey() + 1);
                 host = host != null ? host : aliveNodes.firstEntry();
@@ -120,7 +123,7 @@ public class Client {
         } while (cs == null && host.getKey() != firstHost);
 
         if (cs != null && cs.isQuorumReached() && cs.getValues().size() > 0) {
-            VersionedValue result = conflictResolver.apply(cs.getValues());
+            VersionedValue<V> result = conflictResolver.apply(cs.getValues());
             cs.reconcile();
             ctx.clocks.get(keyHash).merge(result.getClock());
             if (cs.getValues().size() > 1)
@@ -131,7 +134,7 @@ public class Client {
         return null;
     }
 
-    private BigInteger getKeyMD5(int id, Object obj) {
+    private BigInteger getKeyMD5(int id, K obj) {
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ObjectOutputStream oos = new ObjectOutputStream(baos);

@@ -18,7 +18,7 @@ public class Manager implements RemoteManager {
     private int clients = 0;
     private TreeMap<Integer, String> aliveNodes;
 
-    private Manager() {
+    public Manager() {
         aliveNodes = new TreeMap<>();
     }
 

@@ -5,24 +5,20 @@ import java.io.Serializable;
 /**
  * GTStore
  */
-public class VersionedValue implements Serializable {
+public class VersionedValue<T> implements Serializable {
     private final VectorClock clock;
-    private final Object value;
+    private final T value;
 
-    public VersionedValue(VectorClock clock, Object value) {
+    public VersionedValue(VectorClock clock, T value) {
         this.clock = clock;
         this.value = value;
-    }
-
-    public VersionedValue(Object value) {
-        this(new VectorClock(), value);
     }
 
     public VectorClock getClock() {
         return clock;
     }
 
-    public Object getValue() {
+    public T getValue() {
         return value;
     }
 }

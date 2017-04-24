@@ -151,12 +151,12 @@ public class DataNode implements RemoteDataNode {
     }
 
     @Override
-    public ConflictSet get(Context ctx, BigInteger key) throws RemoteException {
+    public ConflictSet<Object> get(Context ctx, BigInteger key) throws RemoteException {
         int replicas = 0;
 
-        ConflictSet cs = new ConflictSet();
+        ConflictSet<Object> cs = new ConflictSet<>();
         if (map.containsKey(key)) {
-            cs.add(new VersionedValue(clocks.getOrDefault(key, new VectorClock()), map.get(key)));
+            cs.add(new VersionedValue<Object>(clocks.getOrDefault(key, new VectorClock()), map.get(key)));
             replicas++;
         }
 
@@ -168,7 +168,7 @@ public class DataNode implements RemoteDataNode {
                     Registry registry = LocateRegistry.getRegistry(host.getValue());
                     RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + host.getKey());
                     ctx.coordinator = false;
-                    ConflictSet remoteCS = node.get(ctx, key);
+                    ConflictSet<Object> remoteCS = node.get(ctx, key);
                     cs.addAll(remoteCS);
 
                     host = aliveNodes.ceilingEntry(host.getKey() + 1);
