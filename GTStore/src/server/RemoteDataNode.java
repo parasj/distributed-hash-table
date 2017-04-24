@@ -13,4 +13,6 @@ public interface RemoteDataNode extends Remote {
     public ConflictSet<Object> get(Context ctx, BigInteger key) throws RemoteException;
 
     public void updateMembership(TreeMap<Integer, String> aliveNodes) throws RemoteException;
+
+    public boolean aliveCheck() throws RemoteException;
 }

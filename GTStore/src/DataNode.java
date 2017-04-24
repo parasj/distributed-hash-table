@@ -13,9 +13,7 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 public class DataNode implements RemoteDataNode {
     private final static int REPLICATION_FACTOR = 3;
@@ -25,6 +23,7 @@ public class DataNode implements RemoteDataNode {
     private int id; // DataNode ID
     private TreeMap<Integer, String> aliveNodes; // current view of alive nodes
     private Map<BigInteger, Object> map; // backing data-store for DataNode
+    private Map<Integer, Map<BigInteger, Object>> hintedMap; // backing data-store for DataNode
     private TreeMap<BigInteger, VectorClock> clocks; // local clocks per key
 
     private DataNode(RemoteManager manager) {
@@ -38,6 +37,7 @@ public class DataNode implements RemoteDataNode {
             e.printStackTrace();
         }
         map = new HashMap<>();
+        hintedMap = new HashMap<>();
         clocks = new TreeMap<>();
     }
 
@@ -89,38 +89,28 @@ public class DataNode implements RemoteDataNode {
 
     @Override
     public Context put(Context ctx, BigInteger key, Object value) throws RemoteException {
-        // TODO: Implement hinted handoff
-
-        map.put(key, value);
-//        System.out.println("Storing (" + key + "," + value + ") in node " + id);
-
-        // Only update the clock if it is the master copy
-        if (ctx.coordinator) {
-            // Check to see if the data item already has clocks
-            if (ctx.clocks.containsKey(key)) {
-                // Check to see if a previous get found multiple irreconcilable leaves
-                if (ctx.notReconciled.contains(key)) {
-                    // Only need to set the version number properly here,
-                    // the replication code below will take care of updating
-                    // replica nodes appropriately.
-                    int maxVersion = ctx.clocks.get(key).getClock().values().stream().max(Integer::compareTo).orElse(-1);
-                    ctx.clocks.get(key).clear();
-                    ctx.clocks.get(key).getClock().put(id, maxVersion);
-                    ctx.notReconciled.remove(key); // Done reconciling
-                } else {
-                    // Already has clocks, only one latest version leaf, so update the clock
-                    VectorClock clock = ctx.clocks.get(key);
-                    clock.increment(id);
-                }
-            } else {
-                // Doesn't  have associated clock, add a new clock
-                // and add a version timestamp to it
-                VectorClock clock = new VectorClock();
-                clock.getClock().put(id, -1); // negative in order to force update
-                clocks.put(key, clock);
-                ctx.clocks.put(key, clock);
+        if(ctx.hinted) {
+            System.err.println("Storing " + key + " in the hinted map");
+            if(hintedMap.containsKey(ctx.coordinatorID))
+                hintedMap.get(ctx.coordinatorID).put(key, value);
+            else {
+                Map<BigInteger, Object> tempMap = new HashMap<>();
+                tempMap.put(key, value);
+                hintedMap.put(ctx.coordinatorID, tempMap);
             }
+            return ctx;
+        } else {
+            System.err.println("Storing " + key + " in the regular map");
+            map.put(key, value);
+        }
 
+        VectorClock clock = clocks.getOrDefault(key, new VectorClock());
+        clock.increment(id);
+        clock.merge(ctx.clock);
+        ctx.clock.merge(clock);
+        clocks.put(key, clock);
+
+        if (ctx.coordinator) {
             // Is the coordinator node for the put; must initiate replication
             // We set this to true here so that the nested put calls won't
             // also initiate replicating, resulting in an infinite loop.
@@ -142,8 +132,24 @@ public class DataNode implements RemoteDataNode {
                 }
             }
 
+            // If not enough replicas, we try hinted-handoff
+            ctx.hinted = true;
+            while ((replicas < WRITE_FACTOR) && (host.getKey() != id)) {
+                try {
+                    Registry registry = LocateRegistry.getRegistry(host.getValue());
+                    RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + host.getKey());
+                    ctx = node.put(ctx, key, value);
+                    host = aliveNodes.ceilingEntry(host.getKey() + 1);
+                    host = host != null ? host : aliveNodes.firstEntry();
+                    replicas++;
+                } catch (NotBoundException e) {
+                    System.err.printf("Couldn't access node %d on host %s\n", host.getKey(), host.getValue());
+                    e.printStackTrace();
+                }
+            }
+            ctx.hinted = false;
+
             ctx.coordinator = true;
-//            System.out.println("Successfully stored " + replicas + " replicas/" + WRITE_FACTOR);
             ctx.success = replicas >= WRITE_FACTOR;
         }
 
@@ -187,9 +193,28 @@ public class DataNode implements RemoteDataNode {
     }
 
     @Override
-    public void updateMembership(TreeMap<Integer, String> aliveNodes) {
+    public void updateMembership(TreeMap<Integer, String> aliveNodes) throws RemoteException {
+        Set<Integer> newMembers = new TreeSet<>(aliveNodes.keySet());
+        newMembers.removeAll(this.aliveNodes.keySet());
+
+        for(int i : newMembers) {
+            if (hintedMap.containsKey(i)) {
+                Map<BigInteger, Object> map = hintedMap.get(i);
+                for(BigInteger key : map.keySet()) {
+                    Context ctx = new Context(clocks.get(key));
+                    ctx.coordinator = true;
+                    put(ctx, key, map.get(key));
+                    ctx.coordinator = false;
+                }
+            }
+        }
+
         System.out.println("New membership set: " + aliveNodes.toString()
                 + " of size " + aliveNodes.size());
         this.aliveNodes = aliveNodes;
+    }
+
+    public boolean aliveCheck() {
+        return true;
     }
 }

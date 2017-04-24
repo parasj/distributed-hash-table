@@ -6,6 +6,7 @@ import java.util.TreeMap;
 
 public interface RemoteManager extends Remote {
     public int registerDataNode() throws RemoteException;
+    public int registerDataNode(int id) throws RemoteException;
 
     public void deRegisterDataNode(int id) throws RemoteException;
 

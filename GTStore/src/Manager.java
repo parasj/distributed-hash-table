@@ -1,25 +1,31 @@
 import server.RemoteDataNode;
 import server.RemoteManager;
 
-import java.rmi.AlreadyBoundException;
-import java.rmi.ConnectException;
-import java.rmi.NotBoundException;
-import java.rmi.RemoteException;
+import java.rmi.*;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.ServerNotActiveException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.Random;
 import java.util.TreeMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class Manager implements RemoteManager {
     // The number of data nodes ever initialized
     private int maxDataNodes = 1024;
     private int clients = 0;
     private TreeMap<Integer, String> aliveNodes;
+    private ScheduledExecutorService aliveChecker;
+    private TreeMap<Integer, ScheduledFuture<?>> nodeFutures;
 
     public Manager() {
         aliveNodes = new TreeMap<>();
+        aliveChecker = new ScheduledThreadPoolExecutor(4);
+        nodeFutures = new TreeMap<>();
     }
 
     public static void main(String args[]) {
@@ -64,13 +70,12 @@ public class Manager implements RemoteManager {
 
     // Every data node is assigned an id on initialization.
     // Nodes are arranged on a ring of size maxDataNodes and
-    // given a random position on that ring.
-    public int registerDataNode() throws RemoteException {
+    // given a random position on that ring. Supports DataNodes
+    // resuming the same id after a shutdown.
+    public int registerDataNode(int id) throws RemoteException {
         Random ran = new Random();
-        int id;
-        do {
+        while(aliveNodes.containsKey(id))
             id = ran.nextInt(maxDataNodes);
-        } while (aliveNodes.containsKey(id));
         System.out.println("Successfully registered new DataNode with id " + id);
 
         try {
@@ -80,7 +85,33 @@ public class Manager implements RemoteManager {
         }
 
         updateMembership(id);
+
+        int finalId = id;
+
+        final ScheduledFuture<?> checker = aliveChecker.scheduleAtFixedRate(() ->
+        {
+            try {
+                Registry registry = LocateRegistry.getRegistry(aliveNodes.get(finalId));
+                RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + finalId);
+                if (!node.aliveCheck()) {
+                    aliveNodes.remove(finalId);
+                    updateMembership(-1);
+                }
+            } catch (Exception e) {
+                System.err.println("Error in heartbeat function on id " + finalId);
+                aliveNodes.remove(finalId);
+                updateMembership(-1);
+                e.printStackTrace();
+            }
+        }, 10, 10, SECONDS);
+        nodeFutures.put(id, checker);
+
         return id;
+    }
+
+    public int registerDataNode() throws RemoteException {
+        return registerDataNode((new Random())
+                .nextInt(maxDataNodes));
     }
 
     public int registerClient() {
@@ -97,16 +128,10 @@ public class Manager implements RemoteManager {
 
     public void deRegisterDataNode(int id) {
         aliveNodes.remove(id);
+        nodeFutures.get(id).cancel(true);
+        nodeFutures.remove(id);
         System.out.println("Successfully deregistered DataNode with id " + id);
         updateMembership(-1);
-    }
-
-    // TODO redirect clients to the appropriate data node
-    // Do we do this on a per-request basis or a per-session basis?
-    // per-request is more resilient, but then consistency issues
-
-    public TreeMap<Integer, String> getDataNodes() {
-        return aliveNodes;
     }
 
     private void updateMembership(int exclude) {

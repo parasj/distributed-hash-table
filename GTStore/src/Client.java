@@ -1,4 +1,5 @@
 import clock.ConflictSet;
+import clock.VectorClock;
 import clock.VersionedValue;
 import server.Context;
 import server.RemoteDataNode;
@@ -14,6 +15,7 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -50,7 +52,7 @@ public class Client<K, V> {
         this(managerHost,
                 (cs) -> cs.stream()
                         .filter(x -> x.getValue() != null)
-                        .max((s1, s2) -> Long.compare(s1.getClock().getLastUpdate(), s2.getClock().getLastUpdate()))
+                        .max(Comparator.comparingLong(s -> s.getClock().getLastUpdate()))
                         .orElse(null));
     }
 
@@ -73,6 +75,8 @@ public class Client<K, V> {
         int firstHost = host.getKey();
 
         ctx.coordinator = true;
+        ctx.clock = new VectorClock();
+        ctx.coordinatorID = host.getKey();
         do {
             try {
                 Registry registry = LocateRegistry.getRegistry(host.getValue());
@@ -83,7 +87,7 @@ public class Client<K, V> {
                 // move on to the next host
                 host = aliveNodes.ceilingEntry(host.getKey() + 1);
                 host = host != null ? host : aliveNodes.firstEntry();
-                e.printStackTrace();
+//                e.printStackTrace();
             }
             // do this until we wrap back around, in the case of failure
         } while (host.getKey() != firstHost);
@@ -119,14 +123,14 @@ public class Client<K, V> {
             } catch (RemoteException | NotBoundException e) {
                 host = aliveNodes.ceilingEntry(host.getKey() + 1);
                 host = host != null ? host : aliveNodes.firstEntry();
-                e.printStackTrace();
+//                e.printStackTrace();
             }
         } while (cs == null && host.getKey() != firstHost);
 
         if (cs != null && cs.isQuorumReached() && cs.getValues().size() > 0) {
             VersionedValue<V> result = conflictResolver.apply(cs.getValues());
             cs.reconcile();
-            ctx.clocks.get(keyHash).merge(result.getClock());
+            ctx.clock.merge(result.getClock());
             if (cs.getValues().size() > 1)
                 put(key, result.getValue());
             return result.getValue();

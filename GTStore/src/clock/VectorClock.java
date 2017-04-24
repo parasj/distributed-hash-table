@@ -75,7 +75,8 @@ public class VectorClock implements Serializable {
 
     public void merge(VectorClock other) {
         lastUpdate = System.nanoTime();
-        other.clock.forEach((k, v) -> clock.put(k, Math.max(clock.getOrDefault(k, -1), v)));
+        other.clock.forEach((k, v) -> clock.put(k, Math.max(
+                clock.getOrDefault(k, 0), v)));
     }
 
     public void clear() {
