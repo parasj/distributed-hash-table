@@ -101,7 +101,7 @@ public class Manager implements RemoteManager {
                 System.err.println("Error in heartbeat function on id " + finalId);
                 aliveNodes.remove(finalId);
                 updateMembership(-1);
-                e.printStackTrace();
+//                e.printStackTrace();
             }
         }, 10, 10, SECONDS);
         nodeFutures.put(id, checker);
@@ -146,7 +146,8 @@ public class Manager implements RemoteManager {
                     RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + dNodeId);
                     node.updateMembership(aliveNodes);
                 } catch (RemoteException | NotBoundException e) {
-                    e.printStackTrace();
+                    System.err.printf("Couldn't access node %d on host %s\n", dNodeId, aliveNodes.get(dNodeId));
+//                    e.printStackTrace();
                 }
             }
         }

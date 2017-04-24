@@ -15,10 +15,12 @@ import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.*;
 
+import static java.lang.Thread.sleep;
+
 public class DataNode implements RemoteDataNode {
-    private final static int REPLICATION_FACTOR = 3;
-    private final static int WRITE_FACTOR = 2; // Minimum number of successful writes
-    private static int READ_FACTOR = 2; // Minimum number of successful reads
+    private final static int REPLICATION_FACTOR = 5;
+    private final static int WRITE_FACTOR = 3; // Minimum number of successful writes
+    private static int READ_FACTOR = 1; // Minimum number of successful reads
 
     private int id; // DataNode ID
     private TreeMap<Integer, String> aliveNodes; // current view of alive nodes
@@ -118,39 +120,41 @@ public class DataNode implements RemoteDataNode {
             ctx.coordinator = false;
             Map.Entry<Integer, String> host = aliveNodes.ceilingEntry(id + 1);
             host = host != null ? host : aliveNodes.firstEntry();
-            for (int i = 1; i < REPLICATION_FACTOR; i++) {
+            for (int i = 1; i < REPLICATION_FACTOR && host.getKey() != id; i++) {
                 try {
                     Registry registry = LocateRegistry.getRegistry(host.getValue());
                     RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + host.getKey());
                     ctx = node.put(ctx, key, value);
-                    host = aliveNodes.ceilingEntry(host.getKey() + 1);
-                    host = host != null ? host : aliveNodes.firstEntry();
                     replicas++;
-                } catch (NotBoundException e) {
+                    sleep(200);
+                } catch (Exception e) {
                     System.err.printf("Couldn't access node %d on host %s\n", host.getKey(), host.getValue());
-                    e.printStackTrace();
+//                    e.printStackTrace();
                 }
+                host = aliveNodes.ceilingEntry(host.getKey() + 1);
+                host = host != null ? host : aliveNodes.firstEntry();
             }
 
             // If not enough replicas, we try hinted-handoff
             ctx.hinted = true;
-            while ((replicas < WRITE_FACTOR) && (host.getKey() != id)) {
+            while ((replicas < REPLICATION_FACTOR) && (host.getKey() != id)) {
                 try {
                     Registry registry = LocateRegistry.getRegistry(host.getValue());
                     RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + host.getKey());
                     ctx = node.put(ctx, key, value);
-                    host = aliveNodes.ceilingEntry(host.getKey() + 1);
-                    host = host != null ? host : aliveNodes.firstEntry();
                     replicas++;
                 } catch (NotBoundException e) {
                     System.err.printf("Couldn't access node %d on host %s\n", host.getKey(), host.getValue());
-                    e.printStackTrace();
+//                    e.printStackTrace();
                 }
+                host = aliveNodes.ceilingEntry(host.getKey() + 1);
+                host = host != null ? host : aliveNodes.firstEntry();
             }
             ctx.hinted = false;
 
             ctx.coordinator = true;
             ctx.success = replicas >= WRITE_FACTOR;
+            System.err.println("Got " + replicas + " writes successfully");
         }
 
         return ctx;
@@ -162,28 +166,27 @@ public class DataNode implements RemoteDataNode {
 
         ConflictSet<Object> cs = new ConflictSet<>();
         if (map.containsKey(key)) {
-            cs.add(new VersionedValue<Object>(clocks.getOrDefault(key, new VectorClock()), map.get(key)));
+            cs.add(new VersionedValue<>(clocks.getOrDefault(key, new VectorClock()), map.get(key)));
             replicas++;
         }
 
         if (ctx.coordinator) {
             Map.Entry<Integer, String> host = aliveNodes.ceilingEntry(id + 1);
             host = host != null ? host : aliveNodes.firstEntry();
-            for (int i = 1; i < REPLICATION_FACTOR; i++) {
+            for (int i = 1; i < REPLICATION_FACTOR && host.getKey() != id; i++) {
                 try {
                     Registry registry = LocateRegistry.getRegistry(host.getValue());
                     RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + host.getKey());
                     ctx.coordinator = false;
                     ConflictSet<Object> remoteCS = node.get(ctx, key);
                     cs.addAll(remoteCS);
-
-                    host = aliveNodes.ceilingEntry(host.getKey() + 1);
-                    host = host != null ? host : aliveNodes.firstEntry();
                     replicas++;
                 } catch (NotBoundException e) {
                     System.err.printf("Couldn't access node %d on host %s\n", host.getKey(), host.getValue());
-                    e.printStackTrace();
+//                    e.printStackTrace();
                 }
+                host = aliveNodes.ceilingEntry(host.getKey() + 1);
+                host = host != null ? host : aliveNodes.firstEntry();
             }
         }
 
