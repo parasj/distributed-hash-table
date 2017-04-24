@@ -5,6 +5,7 @@
 \usepackage{graphicx} % For pictures
 \usepackage{booktabs} % For tables
 \usepackage{tabularx} % For tables
+\usepackage{hyperref}
 \usepackage[english]{babel} % English language/hyphenation
 \usepackage{amsmath,amsfonts,amsthm} % Math packages
 
@@ -55,18 +56,19 @@
 
 \maketitle % Print the title
 
-\section{Architectural Notes}
+\section{Partitioning}
+\subsection{Design notes}
+We utilize a consistent hashing strategy\footnote{\url{http://michaelnielsen.org/blog/consistent-hashing/}} that is resilient to the addition and removal of nodes. A hash indicates a position on a virtual ring upon which nodes lie. Following the ring to the nearest node allows reaching the node or an adjacent node in the case of changing cluster membership. Each node gets a random value in this space representing position on the ring. Each data item is assigned to a node by hashing the client ID concatenated with the key to get its position on the ring, and assigning it to the first node with a position larger than the item's position.
 
-\subsection{Partitioning}
-\begin{enumerate}
-\item Treating the output of a hash function as a ring (largest value wraps around to smallest), each node gets a random value in this space representing position on the ring.
-\item Each data item is assigned to a node by hashing the client id concatenated with the key to get its position on the ring, and assigning it to the first node with a position larger than the item's position.
-\item The client figures out the node to contact using the hash , and continues going down the ring if the node is not available, only giving up when no data node is available.
-\item In this way, arrival or departure of nodes only affects immediate neighbours.
-\item We assume homogenous nodes and accept the cost of non-uniform data and load distribution that results from the randomized position assignment.
-\end{enumerate}
+When the client determines which partition and node their data is allocated to, it contacts said node. In case of failiure (e.g. coordinating node is down) the client proceeds to query subsequent nodes around the ring. In this way, arrival or departure of nodes only affects immediate neighbours. We assume homogenous nodes and accept the cost of non-uniform data and load distribution that results from the randomized position assignment. This issue is not significant as MD5 has a roughly even distribution across the hash space\footnote{\url{http://michiel.buddingh.eu/distribution-of-hash-values}}.
 
-\subsection{Replication}
+\subsection{Discussion of pros and cons of design}
+This design works very well in practice. Large scale services like Akamai utilize consistent hashing at a global scale and it proves quite resilitent to node failiures. This is a very desirable property in our system. We have gone beyond the suggested design and used the structure of the ring to increase availability by cycling through adjacent nodes if the primary hash result is down.  
+
+However, there are some potential drawbacks of this strategy. One notable limitation is a cap on the number of servers that can be added to the ring. As of now, we cap the maximum size of the ring. In order to increase capacity further, we would have to allocate a new hash ring and reallocate servers onto the ring. This can be an expensive operation. Another drawback is performance - unlike hashing strategies (such as those that rely on modular arithmetic over primes), this strategy is not constant time. Realistically, this turns out to not be a major limitation for our service as the ring is not sized too large which limits the maximum amount of time a hash operation could take.
+
+\section{Replication}
+\subsection{Design notes}
 \begin{enumerate}
 \item Replicate in triplicate, or the the number of data nodes alive, whichever is smaller (triplicate works well empirically, CITE THIS).
 \item Each data item is replicated on the node it is assigned to, as well as the two nodes following it on the ring.
