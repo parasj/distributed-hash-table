@@ -116,7 +116,7 @@ public class DataNode implements RemoteDataNode {
                 // Doesn't  have associated clock, add a new clock
                 // and add a version timestamp to it
                 VectorClock clock = new VectorClock();
-                clock.getClock().put(id, 1);
+                clock.getClock().put(id, -1); // negative in order to force update
                 clocks.put(key, clock);
                 ctx.clocks.put(key, clock);
             }
