@@ -1,3 +1,6 @@
+import server.RemoteDataNode;
+import server.RemoteManager;
+
 import java.rmi.AlreadyBoundException;
 import java.rmi.ConnectException;
 import java.rmi.NotBoundException;
@@ -34,14 +37,14 @@ public class Manager implements RemoteManager {
             // TODO: Make sure that the arguments to this are correct on the DataNode
             // so that it hits whatever server is running the manager, not localhost
             Registry registry = LocateRegistry.getRegistry();
-            registry.bind("RemoteManager", stub);
+            registry.bind("server.RemoteManager", stub);
             System.out.println("Successfully registered the manager with the Registry");
 
             // Register a shutdown hook so that we de register from
             // local registry when the Manager is killed
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 try {
-                    registry.unbind("RemoteManager");
+                    registry.unbind("server.RemoteManager");
                     System.out.println("Successfully unbound from the local Registry");
                 } catch (Exception e) {
                     System.err.println("Manager shutdown exception: " + e.toString());
@@ -115,7 +118,7 @@ public class Manager implements RemoteManager {
                         + " at " + aliveNodes.get(dNodeId));
                 try {
                     Registry registry = LocateRegistry.getRegistry(aliveNodes.get(dNodeId));
-                    RemoteDataNode node = (RemoteDataNode) registry.lookup("RemoteDataNode" + dNodeId);
+                    RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + dNodeId);
                     node.updateMembership(aliveNodes);
                 } catch (RemoteException | NotBoundException e) {
                     e.printStackTrace();

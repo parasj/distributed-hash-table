@@ -1,3 +1,5 @@
+package clock;
+
 import java.io.Serializable;
 
 /**

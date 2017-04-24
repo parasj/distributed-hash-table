@@ -1,3 +1,10 @@
+import clock.ConflictSet;
+import clock.VectorClock;
+import clock.VersionedValue;
+import server.Context;
+import server.RemoteDataNode;
+import server.RemoteManager;
+
 import java.math.BigInteger;
 import java.rmi.AlreadyBoundException;
 import java.rmi.ConnectException;
@@ -40,7 +47,7 @@ public class DataNode implements RemoteDataNode {
             // Register the DataNode with the Manager
             Registry registry = LocateRegistry.getRegistry(host);
             RemoteManager managerStub = (RemoteManager)
-                    registry.lookup("RemoteManager");
+                    registry.lookup("server.RemoteManager");
             DataNode node = new DataNode(managerStub);
             System.out.println("Successfully initialized new DataNode with id " + node.id);
 
@@ -52,7 +59,7 @@ public class DataNode implements RemoteDataNode {
             // data node. Must add the id of the data node to avoid
             // polluting the registry.
             Registry localRegistry = LocateRegistry.getRegistry();
-            localRegistry.bind("RemoteDataNode" + node.id, stub);
+            localRegistry.bind("server.RemoteDataNode" + node.id, stub);
             System.out.println("Successfully registered the DataNode with the Registry");
 
 
@@ -62,7 +69,7 @@ public class DataNode implements RemoteDataNode {
                 try {
                     managerStub.deRegisterDataNode(node.id);
                     System.out.println("Successfully deregistered from the Manager");
-                    localRegistry.unbind("RemoteDataNode" + node.id);
+                    localRegistry.unbind("server.RemoteDataNode" + node.id);
                     System.out.println("Successfully unbound from the local Registry");
                 } catch (RemoteException | NotBoundException e) {
                     System.err.println("DataNode shutdown exception: " + e.toString());
@@ -124,7 +131,7 @@ public class DataNode implements RemoteDataNode {
             for (int i = 1; i < REPLICATION_FACTOR; i++) {
                 try {
                     Registry registry = LocateRegistry.getRegistry(host.getValue());
-                    RemoteDataNode node = (RemoteDataNode) registry.lookup("RemoteDataNode" + host.getKey());
+                    RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + host.getKey());
                     ctx = node.put(ctx, key, value);
                     host = aliveNodes.ceilingEntry(host.getKey() + 1);
                     host = host != null ? host : aliveNodes.firstEntry();
@@ -159,7 +166,7 @@ public class DataNode implements RemoteDataNode {
             for (int i = 1; i < REPLICATION_FACTOR; i++) {
                 try {
                     Registry registry = LocateRegistry.getRegistry(host.getValue());
-                    RemoteDataNode node = (RemoteDataNode) registry.lookup("RemoteDataNode" + host.getKey());
+                    RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + host.getKey());
                     ctx.coordinator = false;
                     ConflictSet remoteCS = node.get(ctx, key);
                     cs.addAll(remoteCS);
