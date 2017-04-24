@@ -92,7 +92,7 @@ public class DataNode implements RemoteDataNode {
         // TODO: Implement hinted handoff
 
         map.put(key, value);
-        System.out.println("Storing (" + key + "," + value + ") in node " + id);
+//        System.out.println("Storing (" + key + "," + value + ") in node " + id);
 
         // Only update the clock if it is the master copy
         if (ctx.coordinator) {
@@ -143,7 +143,7 @@ public class DataNode implements RemoteDataNode {
             }
 
             ctx.coordinator = true;
-            System.out.println("Successfully stored " + replicas + " replicas/" + WRITE_FACTOR);
+//            System.out.println("Successfully stored " + replicas + " replicas/" + WRITE_FACTOR);
             ctx.success = replicas >= WRITE_FACTOR;
         }
 
