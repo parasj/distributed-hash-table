@@ -98,8 +98,8 @@ public class ShoppingCart {
     }
 
     public static void main(String[] args) throws InterruptedException {
-        int nThreads = 10;
-        int nIterations = 10;
+        int nThreads = 20;
+        int nIterations = 20;
 
         IntStream.range(0, nThreads).parallel()
                 .mapToObj(ShoppingCart::new)

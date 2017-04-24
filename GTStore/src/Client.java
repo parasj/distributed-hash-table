@@ -49,8 +49,9 @@ public class Client<K, V> {
     public Client(String managerHost) {
         this(managerHost,
                 (cs) -> cs.stream()
-                    .max((s1, s2) -> Long.compare(s1.getClock().getLastUpdate(), s2.getClock().getLastUpdate()))
-                    .orElse(null));
+                        .filter(x -> x.getValue() != null)
+                        .max((s1, s2) -> Long.compare(s1.getClock().getLastUpdate(), s2.getClock().getLastUpdate()))
+                        .orElse(null));
     }
 
     /**
