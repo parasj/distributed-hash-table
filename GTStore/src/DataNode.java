@@ -15,12 +15,10 @@ import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.*;
 
-import static java.lang.Thread.sleep;
-
 public class DataNode implements RemoteDataNode {
     private final static int REPLICATION_FACTOR = 5;
     private final static int WRITE_FACTOR = 3; // Minimum number of successful writes
-    private static int READ_FACTOR = 1; // Minimum number of successful reads
+    private static int READ_FACTOR = 3; // Minimum number of successful reads
 
     private int id; // DataNode ID
     private TreeMap<Integer, String> aliveNodes; // current view of alive nodes
@@ -102,7 +100,7 @@ public class DataNode implements RemoteDataNode {
             }
             return ctx;
         } else {
-            System.err.println("Storing " + key + " in the regular map");
+//            System.err.println("Storing " + key + " in the regular map");
             map.put(key, value);
         }
 
@@ -126,9 +124,8 @@ public class DataNode implements RemoteDataNode {
                     RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + host.getKey());
                     ctx = node.put(ctx, key, value);
                     replicas++;
-                    sleep(200);
                 } catch (Exception e) {
-                    System.err.printf("Couldn't access node %d on host %s\n", host.getKey(), host.getValue());
+//                    System.err.printf("Couldn't access node %d on host %s\n", host.getKey(), host.getValue());
 //                    e.printStackTrace();
                 }
                 host = aliveNodes.ceilingEntry(host.getKey() + 1);
@@ -154,7 +151,7 @@ public class DataNode implements RemoteDataNode {
 
             ctx.coordinator = true;
             ctx.success = replicas >= WRITE_FACTOR;
-            System.err.println("Got " + replicas + " writes successfully");
+//            System.err.println("Got " + replicas + " writes successfully");
         }
 
         return ctx;

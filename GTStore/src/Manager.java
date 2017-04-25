@@ -40,8 +40,6 @@ public class Manager implements RemoteManager {
             // by name in order to obtain the corresponding stubs
             // The getRegistry call will fail if there is no registry running.
 
-            // TODO: Make sure that the arguments to this are correct on the DataNode
-            // so that it hits whatever server is running the manager, not localhost
             Registry registry = LocateRegistry.getRegistry();
             registry.bind("server.RemoteManager", stub);
             System.out.println("Successfully registered the manager with the Registry");
@@ -79,7 +77,9 @@ public class Manager implements RemoteManager {
         System.out.println("Successfully registered new DataNode with id " + id);
 
         try {
-            aliveNodes.put(id, UnicastRemoteObject.getClientHost());
+            synchronized (this) {
+                aliveNodes.put(id, UnicastRemoteObject.getClientHost());
+            }
         } catch (ServerNotActiveException e) {
             e.printStackTrace();
         }
@@ -127,7 +127,7 @@ public class Manager implements RemoteManager {
     }
 
     public void deRegisterDataNode(int id) {
-        aliveNodes.remove(id);
+        synchronized (this) {aliveNodes.remove(id);}
         nodeFutures.get(id).cancel(true);
         nodeFutures.remove(id);
         System.out.println("Successfully deregistered DataNode with id " + id);
@@ -137,17 +137,19 @@ public class Manager implements RemoteManager {
     private void updateMembership(int exclude) {
         // since this succeeded, we update all data nodes with the new membership
         // information
-        for (Integer dNodeId : aliveNodes.keySet()) {
-            if (dNodeId != exclude) {
-                System.out.println("Updating data node " + dNodeId
-                        + " at " + aliveNodes.get(dNodeId));
-                try {
-                    Registry registry = LocateRegistry.getRegistry(aliveNodes.get(dNodeId));
-                    RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + dNodeId);
-                    node.updateMembership(aliveNodes);
-                } catch (RemoteException | NotBoundException e) {
-                    System.err.printf("Couldn't access node %d on host %s\n", dNodeId, aliveNodes.get(dNodeId));
+        synchronized (this) {
+            for (Integer dNodeId : aliveNodes.keySet()) {
+                if (dNodeId != exclude) {
+                    System.out.println("Updating data node " + dNodeId
+                            + " at " + aliveNodes.get(dNodeId));
+                    try {
+                        Registry registry = LocateRegistry.getRegistry(aliveNodes.get(dNodeId));
+                        RemoteDataNode node = (RemoteDataNode) registry.lookup("server.RemoteDataNode" + dNodeId);
+                        node.updateMembership(aliveNodes);
+                    } catch (RemoteException | NotBoundException e) {
+                        System.err.printf("Couldn't access node %d on host %s\n", dNodeId, aliveNodes.get(dNodeId));
 //                    e.printStackTrace();
+                    }
                 }
             }
         }
