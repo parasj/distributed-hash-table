@@ -101,14 +101,29 @@ There are numerous benefits to this approach. We can resolve most consistency is
 A major drawback is the large storage requirements presented by vector clocks. Over time, these clocks could grow to be bigger than the original data that was being stored. Garbage collection can be a technique used to recover wasted space. We have not implemented clock truncation yet, so we assume that there aren't multiple catastrophic server failures. We ignore this problem as this issue would be difficult to recover from in any distributed system.
 
 \section{Put/Get operations}
+We now walk though what happens when a put and get operation occurs.
+
 \begin{enumerate}
-\item We store key value pairs, both of which are blobs of bytes. The key is MD5 hashed after prepending the client id to it, borrowing a trick from the Dynamo paper, in order to get an unique identifier that is used for all internal operations.
-\item The client determines which node to send get/put requests to based on the hash as described in the section on consistent hashing before.
-\item For put requests, the node generates the vector clock for the new version and writes the new version locally, It then sends the new version to the two successor nodes on the ring. The write is considered successful if both nodes respond.
-\item For get requests, the node asks the two ring successor nodes for all existing versions of the data and waits for both to respond before reconciling and returning the result. If reconciliation takes place, the reconciled versions are written back into the replication nodes. If multiple leaves are returned, the context returns this, and no write-back takes place. Subsequent puts with the same key treat the value submitted by the put as the canonical version, and the put automatically overwrites old versions of all replicas with this reconciled version.
+\item We store key value pairs, both of which are blobs of bytes. The key is MD5 hashed after prepending the client ID to it, borrowing a trick from the Dynamo paper, in order to get an unique identifier that is used for all internal operations. This hash distribution is relatively even across the hash space.
+\item The client determines which node to send get/put requests to based on the hash as described in Section \ref{partitioning}.
+\item For put requests, the node generates the vector clock for the new version and writes the new version locally. It then sends the new version to the two successor nodes on the ring. The write is considered successful if one replica responds, which is a majority (the coordinator itself and the other replica).
+\item For get requests, the node asks the two ring successor nodes for all existing versions of the data and waits for both to respond before reconciling and returning the result. If reconciliation takes place, the reconciled versions are written back into the replication nodes.
+\item If multiple leaves are returned, the client generates an unresolved \texttt{ConflictSet}. The client then uses the conflict resolution handler that the client sets at runtime to solve for which leaf is relevant. This value is then written back to the store as the latest version.
 \end{enumerate}
 
-\subsection{Hinted Handoff} (NOT IMPLEMENTED YET)
+\section{Hinted Handoff} (NOT IMPLEMENTED YET)
 Borrowing a technique from the Dynamo paper, if a put operation detects that one of the nodes it tries to write to is unavailable, it moves on to the next node in the ring, marking it as a ``false'' write. False writes are stored separately in the data nodes, and when the failed node comes back online, the Manager asks all nodes to write stored false writes back to their intended locations. We assume low membership churn and that node failures are transient, and do not implement measures to deal with permanent node failures.
+
+\section{Design tradeoff analysis}
+We have already discussed design tradeoffs in the context of Partition, Replication and Versioning strategies. We now discuss tradeoffs related to our decision to prioritize performance and scalability. Our goal was to design the system to have linear scalability -- as we add more nodes, we wanted throughput to scale. This decision impacted many choices thoughout our design. Consistent hashing is critical to this design choice as it allows arbitrary addition and removal of nodes with stable partitioning. This also impacted our replication strategy as we decided handle replication internally between DataNodes. This reduced client-DataNode chatter as we assumed that DataNodes would be hosted on more powerful servers with fast interconnect between peer DataNodes. This also caused us to opt for a semi-distributed organization of DataNode responsibilities. All DataNodes are equal peers - no server has more or less responsiblity (with exception of the leader). Thus, every DataNode can coordinate replication for its own keys. This prevents there being a single bottleneck though one node.\footnote{The master still is a bottleneck for the system but it is performing much less work per RPC than the DataNode.}
+
+We also chose to resolve conflicts in the client. This choice was motivated by two factors - first was to empower the client to resolve conflicts with more local information, and second was to reduce reconciliation load from the DataNodes. Clients recieve results in a \texttt{ConflictSet} batch and resolve the conflicts locally on their node, which is an $O(n^2)$ operation. As it more than linear, we chose to offload this responsibility to the client. This also improved the power of conflict resolution
+strategies.
+
+These choices paid off in the end. As my machine is a laptop, I only tested running up to 5 DataNodes. As I scaled from 3 to 5 DataNodes, we indeed see system throughput increases linearly. This was exactly what we were working towards.
+
+\noindent\includegraphics[width=.65\textwidth]{LinearScaling.png}
+
+We see that as we add new nodes, the throughput scales as well. This is a useful property in a distributed hash table as it allows increasing system throughput by horizontally scaling over time. We can add new nodes gradually to meet demand.
 
 \end{document}
