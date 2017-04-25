@@ -135,4 +135,11 @@ These choices paid off in the end. As my machine is a laptop, I only tested runn
 
 We see that as we add new nodes, the throughput scales as well. This is a useful property in a distributed hash table as it allows increasing system throughput by horizontally scaling over time. We can add new nodes gradually to meet demand.
 
+\subsection{Analyzing impact of failure on throughput}
+We wanted to examine the performance of our system with failure. In a cluster of 7 DataNodes, we rebooted a single DataNode once at iteration 20 and once just after iteration 32. We saw throughput drop immediately, which is expected. However, performance quickly normalizes to the baseline after each failure.\\
+
+\noindent\includegraphics[width=\textwidth]{throughput_failiure.png}
+
+This behavior is another helpful factor for a distributed hash table. In a production deployment, a customer can overprovision the cluster so that temporary failures will not disrupt overall system health. As nodes recover, system throughput recovers as well.
+
 \end{document}
