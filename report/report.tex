@@ -129,7 +129,7 @@ We have already discussed design tradeoffs in the context of Partition, Replicat
 We also chose to resolve conflicts in the client. This choice was motivated by two factors - first was to empower the client to resolve conflicts with more local information, and second was to reduce reconciliation load from the DataNodes. Clients recieve results in a \texttt{ConflictSet} batch and resolve the conflicts locally on their node, which is an $O(n^2)$ operation. As it more than linear, we chose to offload this responsibility to the client. This also improved the power of conflict resolution
 strategies.
 
-These choices paid off in the end. As my machine is a laptop, I only tested running up to 5 DataNodes. As I scaled from 3 to 5 DataNodes, we indeed see system throughput increases linearly. This was exactly what we were working towards.
+These choices paid off in the end. As my machine is a laptop, I only tested running up to 5 DataNodes. As I scaled from 3 to 5 DataNodes, we indeed see system throughput increases linearly. This was exactly what we were working towards. However, this choice did come at a cost. We only tolerate failure of one DataNode as increasing the replication factor adds super-linear costs to each operation which reduces the systems ability to scale linearly. This constraint reduces resilience (less tolerance for DataNode downtime) and availability (clients may initially contact a coordinator DataNode that is down). Consistency shouldn't be impacted significantly.
 
 \noindent\includegraphics[width=.65\textwidth]{LinearScaling.png}
 
