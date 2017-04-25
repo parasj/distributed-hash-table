@@ -5,6 +5,7 @@
 \usepackage{graphicx} % For pictures
 \usepackage{booktabs} % For tables
 \usepackage{tabularx} % For tables
+\usepackage{hyperref}
 \usepackage[english]{babel} % English language/hyphenation
 \usepackage{amsmath,amsfonts,amsthm} % Math packages
 
@@ -55,36 +56,51 @@
 
 \maketitle % Print the title
 
-\section{Architectural Notes}
+\section{Partitioning}
+\label{partitioning}
+\subsection{Design notes}
+We utilize a consistent hashing strategy\footnote{\url{http://michaelnielsen.org/blog/consistent-hashing/}} that is resilient to the addition and removal of nodes. A hash indicates a position on a virtual ring upon which nodes lie. Following the ring to the nearest node allows reaching the node or an adjacent node in the case of changing cluster membership. Each node gets a random value in this space representing position on the ring. Each data item is assigned to a node by hashing the client ID concatenated with the key to get its position on the ring, and assigning it to the first node with a position larger than the item's position.
 
-\subsection{Partitioning}
+When the client determines which partition and node their data is allocated to, it contacts said node. In case of failiure (e.g. coordinating node is down) the client proceeds to query subsequent nodes around the ring. In this way, arrival or departure of nodes only affects immediate neighbours. We assume homogenous nodes and accept the cost of non-uniform data and load distribution that results from the randomized position assignment. This issue is not significant as MD5 has a roughly even distribution across the hash space\footnote{\url{http://michiel.buddingh.eu/distribution-of-hash-values}}.
+
+\subsection{Discussion of pros and cons of design}
+This design works very well in practice. Large scale services like Akamai utilize consistent hashing at a global scale and it proves quite resilitent to node failiures. This is a very desirable property in our system. We have gone beyond the suggested design and used the structure of the ring to increase availability by cycling through adjacent nodes if the primary hash result is down.  
+
+However, there are some potential drawbacks of this strategy. One notable limitation is a cap on the number of servers that can be added to the ring. As of now, we cap the maximum size of the ring. In order to increase capacity further, we would have to allocate a new hash ring and reallocate servers onto the ring. This can be an expensive operation. Another drawback is performance - unlike hashing strategies (such as those that rely on modular arithmetic over primes), this strategy is not constant time. Realistically, this turns out to not be a major limitation for our service as the ring is not sized too large which limits the maximum amount of time a hash operation could take.
+
+\section{Replication}
+\subsection{Design notes}
+Data is replicated upon a \texttt{put} operation. When a client sends a request to the client library, the request will be routed to the coordinating server for the write as dictated by the consistent hashing strategy, as described in Section \ref{partitioning}. The coordinating server will contact the next $R$ nodes in the ring. If $W$ of these writes succeed, then the operation is marked as a success. This strategy has the client delegate one DataNode as the coordinator of the request, where that coordinating DataNode will communicate internally to its peers. The Manager keeps track of membership, modifying the membership lists of each data node appropriately when leaving/additional nodes are detected.
+
+\subsection{Replication factors}
+By default, we use the following replication factors:
 \begin{enumerate}
-\item Treating the output of a hash function as a ring (largest value wraps around to smallest), each node gets a random value in this space representing position on the ring.
-\item Each data item is assigned to a node by hashing the client id concatenated with the key to get its position on the ring, and assigning it to the first node with a position larger than the item's position.
-\item The client figures out the node to contact using the hash , and continues going down the ring if the node is not available, only giving up when no data node is available.
-\item In this way, arrival or departure of nodes only affects immediate neighbours.
-\item We assume homogenous nodes and accept the cost of non-uniform data and load distribution that results from the randomized position assignment.
+\item Data is replicated 3 times on write. Writes are deemed successful if at least 2 of these attempts succeed.
+\item Data is read 3 times on read. Reads are deemed successful if at least 2 of these attempts succeed. Note that this number is before conflicts are resolved.
 \end{enumerate}
 
-\subsection{Replication}
-\begin{enumerate}
-\item Replicate in triplicate, or the the number of data nodes alive, whichever is smaller (triplicate works well empirically, CITE THIS).
-\item Each data item is replicated on the node it is assigned to, as well as the two nodes following it on the ring.
-\item Replication is handled by data nodes, not the client; the data nodes contact the two successive data nodes in order to replicate data items. This is done in order to minimize traffic between clients and data nodes, restricting that purely to transfer of data. There is also the assumption that the data nodes have more processing power vailable to them than the clients and therefore should do more of the work.
-\item The Manager keeps track of membership, modifying the membership lists of each data node appropriately when leaving/additional nodes are detected.
-\end{enumerate}
+This ensures that the property $W + R > K$ where $K$ is the replication factor. Thus, writes and reads will need a majority of successes to succeed.
 
-\subsection{Versioning}
-\begin{enumerate}
-\item Eventual consistency, just like Dynamo. A single put call returns before the update is applied on all replicas.
-\item There is an upper bound on propagation times given no failures.
-\item Treat modifications to data item as a new, immutable version; multiple versions of a data item may be present in the system at any given point of time.
-\item Use vector clocks; each data item has a list of (node, version) pairs that stores the versioning information across branches.
-\item \textbf{Reconciliation} If there are two versions in the system that cannot be ordered, we return all the objects in the leaves and treat the subsequent put as the final version of the data item. We effectively push the responsibility of reconciliation in such cases to the user. If ordering is possible, we pick the latest version.
-\item Have not implemented clock truncation yet, assume that there aren't multiple catastrophic server failures.
-\end{enumerate}
+\subsection{Discussion}
+The design discussed here has several benefits. The client has a single point of contact during the operation and the DataNodes can then communicate internally on a separate high speed network. This is done in order to minimize traffic between clients and data nodes, restricting that purely to transfer of data. There is also the assumption that the data nodes have more processing power available to them than the clients and therefore should do more of the work.
 
-\subsection{Put/Get operations}
+There are some tradeoffs, however. With only 3 replicas, we can only tolerate one node failure while ensuring availability. This number should be odd to ensure that there is some majority in the system. Given the properties of the ring, we can also get into situations where sequences of node failiures and recoveries could potentially disrupt system wide consistency. However, these patterns are likely to be rare and are difficult to recover from regardless.
+
+\section{Versioning}
+
+\subsection{Design}
+We based our versioning strategy off the vector clock method described in the Dynamo paper. This strategy is eventually consistent, meaning that there is an upper bound on propagation times given no failures. A single put call returns before the update is applied on all replicas. We treat modifications to data item as a new, immutable version; multiple versions of a data item may be present in the system at any given point of time. Thus, we are able to write anytime to the system. This necessitates a consistency resolution protocol at the time of read.
+
+This consistency problem is solved using vector clocks. These clocks are lists of \texttt{(node, version)} tuples that store the versioning information across branches. This allows the system to trace though the lineage of a key-value pair and attempt to resolve consistency issues within the system. In the case that consistency issues cannot be resolved, we return a set of maximal items (from the partially-order set of results) to the client and allow them to resolve the conflict in the \texttt{ConflictSet}. The client can register a callback handler which will resolve any issues.
+
+When issues are resolved, the subsequent put is treted as the final version of the data item. We effectively push the responsibility of reconciliation in such cases to the user. If ordering is possible, we pick the latest version. 
+
+\subsection{Discussion}
+There are numerous benefits to this approach. We can resolve most consistency issues within the system without additional information from the client using the vector clocks. The small number of conflicts otherwise that need to be resoved can be handled within the client. This approach allows us to relax consistency while still being able to recover state. This approach also affords us write availability at the cost of read consistency.
+
+A major drawback is the large storage requirements presented by vector clocks. Over time, these clocks could grow to be bigger than the original data that was being stored. Garbage collection can be a technique used to recover wasted space. We have not implemented clock truncation yet, so we assume that there aren't multiple catastrophic server failures. We ignore this problem as this issue would be difficult to recover from in any distributed system.
+
+\section{Put/Get operations}
 \begin{enumerate}
 \item We store key value pairs, both of which are blobs of bytes. The key is MD5 hashed after prepending the client id to it, borrowing a trick from the Dynamo paper, in order to get an unique identifier that is used for all internal operations.
 \item The client determines which node to send get/put requests to based on the hash as described in the section on consistent hashing before.
@@ -92,7 +108,7 @@
 \item For get requests, the node asks the two ring successor nodes for all existing versions of the data and waits for both to respond before reconciling and returning the result. If reconciliation takes place, the reconciled versions are written back into the replication nodes. If multiple leaves are returned, the context returns this, and no write-back takes place. Subsequent puts with the same key treat the value submitted by the put as the canonical version, and the put automatically overwrites old versions of all replicas with this reconciled version.
 \end{enumerate}
 
-\subsubsection{Hinted Handoff} (NOT IMPLEMENTED YET)
+\subsection{Hinted Handoff} (NOT IMPLEMENTED YET)
 Borrowing a technique from the Dynamo paper, if a put operation detects that one of the nodes it tries to write to is unavailable, it moves on to the next node in the ring, marking it as a ``false'' write. False writes are stored separately in the data nodes, and when the failed node comes back online, the Manager asks all nodes to write stored false writes back to their intended locations. We assume low membership churn and that node failures are transient, and do not implement measures to deal with permanent node failures.
 
 \end{document}
