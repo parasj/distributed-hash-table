@@ -92,7 +92,7 @@ public class ShoppingCart {
     }
 
     public static void main(String[] args) throws InterruptedException {
-        int nThreads = 10;
+        int nThreads = 18;
         int nIterations = 5;
 
         IntStream.range(0, nThreads).parallel()
