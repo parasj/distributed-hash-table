@@ -57,6 +57,7 @@
 \maketitle % Print the title
 
 \section{Partitioning}
+\label{partitioning}
 \subsection{Design notes}
 We utilize a consistent hashing strategy\footnote{\url{http://michaelnielsen.org/blog/consistent-hashing/}} that is resilient to the addition and removal of nodes. A hash indicates a position on a virtual ring upon which nodes lie. Following the ring to the nearest node allows reaching the node or an adjacent node in the case of changing cluster membership. Each node gets a random value in this space representing position on the ring. Each data item is assigned to a node by hashing the client ID concatenated with the key to get its position on the ring, and assigning it to the first node with a position larger than the item's position.
 
@@ -69,6 +70,8 @@ However, there are some potential drawbacks of this strategy. One notable limita
 
 \section{Replication}
 \subsection{Design notes}
+Data is replicated upon a \texttt{put} operation. When a client sends a request to the client library, the request will be routed to the coordinating server for the write as dictated by the consistent hashing strategy, as described in Section \ref{partitioning}. The coordinating server will contact the next $R$ nodes in the ring. If $W$ of these writes succeed, then the operation is marked as a success. This strategy has the client delegate one DataNode as the coordinator of the request, where that coordinating DataNode will communicate internally to its peers. The client has a single point of contact during the operation and the DataNodes can then communicate internally on a separate high speed network.
+
 \begin{enumerate}
 \item Replicate in triplicate, or the the number of data nodes alive, whichever is smaller (triplicate works well empirically, CITE THIS).
 \item Each data item is replicated on the node it is assigned to, as well as the two nodes following it on the ring.
